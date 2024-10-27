@@ -374,5 +374,5 @@ class RodentSingleClip(PipelineEnv):
         # shape and magnitude.
         return 0.5 * jp.arccos(dist)[..., np.newaxis]
     
-class RodentMultiClip(RodentSingleClip):
+#class RodentMultiClip(RodentSingleClip):
     
