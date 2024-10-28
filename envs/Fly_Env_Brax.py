@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 from preprocessing.preprocess import ReferenceClip
 
+
 def _bounded_quat_dist(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     """Computes a quaternion distance limiting the difference to a max of pi/2.
 
@@ -50,7 +51,7 @@ class FlyTracking(PipelineEnv):
         reference_clip,
         body_names: List[str],
         joint_names: List[str],
-        end_eff_names:List[str],
+        end_eff_names: List[str],
         n_clips: int = 1,
         clip_length: int = 1001,
         mocap_hz: int = 500,
@@ -82,22 +83,22 @@ class FlyTracking(PipelineEnv):
         iterations: int = 6,
         ls_iterations: int = 6,
         inference_mode: bool = False,
-        free_jnt: bool=False,
+        free_jnt: bool = False,
         **kwargs,
     ):
-        
+
         # Convert to torque actuators
         if (torque_actuators) and (mjcf_path is None):
             from pathlib import Path
-            mjcf_path = (Path(mjcf_path).parent / 'fruitfly_force_fast.xml').as_posix()
-            
-        root = mjcf_dm.from_path(mjcf_path)
-        print('Loaded Model:', mjcf_path)
-            # for actuator in root.find_all("actuator"):
-            #     actuator.gainprm = [actuator.forcerange[1]]
-            #     del actuator.biastype
-            #     del actuator.biasprm
 
+            mjcf_path = (Path(mjcf_path).parent / "fruitfly_force_fast.xml").as_posix()
+
+        root = mjcf_dm.from_path(mjcf_path)
+        print("Loaded Model:", mjcf_path)
+        # for actuator in root.find_all("actuator"):
+        #     actuator.gainprm = [actuator.forcerange[1]]
+        #     del actuator.biastype
+        #     del actuator.biasprm
 
         mj_model = mjcf_dm.Physics.from_mjcf_model(root).model.ptr
         mj_model.opt.solver = {
@@ -219,8 +220,17 @@ class FlyTracking(PipelineEnv):
         #     rng1, (self.sys.nq,), minval=low, maxval=hi
         # )
         # qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
-        new_qpos = jp.concatenate((reference_frame.position, reference_frame.quaternion, reference_frame.joints),axis=0)
-        qpos = new_qpos + jax.random.uniform(rng1, (self.sys.nq,), minval=low, maxval=hi)
+        new_qpos = jp.concatenate(
+            (
+                reference_frame.position,
+                reference_frame.quaternion,
+                reference_frame.joints,
+            ),
+            axis=0,
+        )
+        qpos = new_qpos + jax.random.uniform(
+            rng1, (self.sys.nq,), minval=low, maxval=hi
+        )
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
         # qvel = jp.zeros((self.sys.nv))
         data = self.pipeline_init(qpos, qvel)
@@ -241,7 +251,7 @@ class FlyTracking(PipelineEnv):
             "bodypos_reward": zero,
             "endeff_reward": zero,
             "reward_ctrlcost": zero,
-            "ctrl_diff_cost":zero,
+            "ctrl_diff_cost": zero,
             "too_far": zero,
             "bad_pose": zero,
             "bad_quat": zero,
@@ -273,26 +283,54 @@ class FlyTracking(PipelineEnv):
         )
 
         pos_distance = data.qpos[:3] - reference_clip.position
-        pos_reward = self._pos_reward_weight * jp.exp(-self._pos_scaling * jp.sum(pos_distance**2))
+        pos_reward = self._pos_reward_weight * jp.exp(
+            -self._pos_scaling * jp.sum(pos_distance**2)
+        )
 
-        quat_distance = jp.sum(_bounded_quat_dist(data.qpos[3:7], reference_clip.quaternion) ** 2)
-        quat_reward = self._quat_reward_weight * jp.exp(-self._quat_scaling * quat_distance)
+        quat_distance = jp.sum(
+            _bounded_quat_dist(data.qpos[3:7], reference_clip.quaternion) ** 2
+        )
+        quat_reward = self._quat_reward_weight * jp.exp(
+            -self._quat_scaling * quat_distance
+        )
 
         joint_distance = jp.sum((data.qpos[7:] - reference_clip.joints) ** 2)
-        joint_reward = self._joint_reward_weight * jp.exp(-self._joint_scaling * joint_distance)
+        joint_reward = self._joint_reward_weight * jp.exp(
+            -self._joint_scaling * joint_distance
+        )
         info["joint_distance"] = joint_distance
 
-        angvel_distance = jp.sum((data.qvel[3:6] - reference_clip.angular_velocity) ** 2)
-        angvel_reward = self._angvel_reward_weight * jp.exp(-self._angvel_scaling * angvel_distance)
-        info['angvel_distance'] = angvel_distance
+        angvel_distance = jp.sum(
+            (data.qvel[3:6] - reference_clip.angular_velocity) ** 2
+        )
+        angvel_reward = self._angvel_reward_weight * jp.exp(
+            -self._angvel_scaling * angvel_distance
+        )
+        info["angvel_distance"] = angvel_distance
 
-        bodypos_distance = jp.sum((data.xpos[self._body_idxs] - reference_clip.body_positions[self._body_idxs]).flatten()** 2)
-        bodypos_reward = self._bodypos_reward_weight * jp.exp(-self._bodypos_scaling* bodypos_distance)
-        info['bodypos_distance'] = bodypos_distance
+        bodypos_distance = jp.sum(
+            (
+                data.xpos[self._body_idxs]
+                - reference_clip.body_positions[self._body_idxs]
+            ).flatten()
+            ** 2
+        )
+        bodypos_reward = self._bodypos_reward_weight * jp.exp(
+            -self._bodypos_scaling * bodypos_distance
+        )
+        info["bodypos_distance"] = bodypos_distance
 
-        endeff_distance = jp.sum((data.xpos[self._endeff_idxs] - reference_clip.body_positions[self._endeff_idxs]).flatten()** 2)
-        endeff_reward = self._endeff_reward_weight * jp.exp(-self._endeff_scaling * endeff_distance)
-        info['endeff_distance'] = endeff_distance
+        endeff_distance = jp.sum(
+            (
+                data.xpos[self._endeff_idxs]
+                - reference_clip.body_positions[self._endeff_idxs]
+            ).flatten()
+            ** 2
+        )
+        endeff_reward = self._endeff_reward_weight * jp.exp(
+            -self._endeff_scaling * endeff_distance
+        )
+        info["endeff_distance"] = endeff_distance
 
         min_z, max_z = self._healthy_z_range
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] < min_z, 0.0, 1.0)
@@ -310,7 +348,7 @@ class FlyTracking(PipelineEnv):
             jp.square(info["prev_ctrl"] - action)
         )
         info["prev_ctrl"] = action
-        
+
         reference_obs, proprioceptive_obs = self._get_obs(data, info)
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
         reward = (
@@ -422,22 +460,24 @@ class FlyTracking(PipelineEnv):
             ]
         )
         return reference_obs, prorioceptive_obs
+
     def render(
-            self,
-            trajectory: List[State],
-            camera: str | None = None,
-            width: int = 480,
-            height: int = 320,
-            scene_option: Any = None,
-        ) -> Sequence[np.ndarray]:
-            camera = camera or "track1"
-            return super().render(
-                trajectory,
-                camera=camera,
-                width=width,
-                height=height,
-                scene_option=scene_option,
-            )
+        self,
+        trajectory: List[State],
+        camera: str | None = None,
+        width: int = 480,
+        height: int = 320,
+        scene_option: Any = None,
+    ) -> Sequence[np.ndarray]:
+        camera = camera or "track1"
+        return super().render(
+            trajectory,
+            camera=camera,
+            width=width,
+            height=height,
+            scene_option=scene_option,
+        )
+
 
 class FlyMultiClipTracking(FlyTracking):
     def __init__(
@@ -445,7 +485,7 @@ class FlyMultiClipTracking(FlyTracking):
         reference_clip,
         body_names: List[str],
         joint_names: List[str],
-        end_eff_names:List[str],
+        end_eff_names: List[str],
         n_clips: int = 1,
         clip_length: int = 1001,
         mocap_hz: int = 500,
@@ -477,7 +517,7 @@ class FlyMultiClipTracking(FlyTracking):
         iterations: int = 6,
         ls_iterations: int = 6,
         inference_mode: bool = False,
-        free_jnt: bool=False,
+        free_jnt: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -549,37 +589,39 @@ class FlyMultiClipTracking(FlyTracking):
         return jax.tree_map(lambda x: x[info["clip_idx"]], self._reference_clips)
 
 
-
-
 class FlyRunSim(PipelineEnv):
     def __init__(
         self,
         reference_clip,
         body_names: List[str],
         joint_names: List[str],
-        end_eff_names:List[str],
+        end_eff_names: List[str],
+        lower_leg_names: List[str],
         mjcf_path: str = "./assets/fruitfly/fruitfly_force_fast.xml",
         clip_length: int = 1000,
         obs_noise: float = 0.05,
         ctrl_cost_weight=0.01,
         tracking_lin_vel_weight=1.5,
-        tracking_ang_vel_weight= 0.8,
+        tracking_ang_vel_weight=0.8,
         lin_vel_z_weight=-2.0,
         ang_vel_xy_weight=-0.05,
         orientation_weight=-5.0,
         torques_weight=-0.0002,
         action_rate_weight=-0.01,
         stand_still_weight=-0.5,
+        foot_slip_weight=-0.1,
         termination_weight=-1.0,
+        linvel_scaling=400.0,
+        angvel_scaling=4.0,
         healthy_z_range=(-0.05, 0.1),
         physics_steps_per_control_step=10,
         reset_noise_scale=1e-3,
-        action_scale: float=1.0,
+        action_scale: float = 1.0,
         physics_timestep: float = 2e-4,
         solver="cg",
         iterations: int = 6,
         ls_iterations: int = 6,
-        ref_len = 5,
+        ref_len=5,
         free_jnt=True,
         inference_mode=False,
         torque_actuators=True,
@@ -589,9 +631,9 @@ class FlyRunSim(PipelineEnv):
 
         # Convert to torque actuators
         if torque_actuators:
-            mjcf_path = (Path(mjcf_path).parent / 'fruitfly_force_fast.xml').as_posix()
-        else: 
-            mjcf_path = (Path(mjcf_path).parent / 'fruitfly_fast.xml').as_posix()
+            mjcf_path = (Path(mjcf_path).parent / "fruitfly_force_fast.xml").as_posix()
+        else:
+            mjcf_path = (Path(mjcf_path).parent / "fruitfly_fast.xml").as_posix()
 
         spec = mujoco.MjSpec()
         spec = spec.from_file(mjcf_path)
@@ -610,7 +652,6 @@ class FlyRunSim(PipelineEnv):
 
         kwargs["n_frames"] = kwargs.get("n_frames", physics_steps_per_control_step)
         kwargs["backend"] = "mjx"
-
 
         super().__init__(sys, **kwargs)
 
@@ -641,15 +682,23 @@ class FlyRunSim(PipelineEnv):
                 for body in end_eff_names
             ]
         )
-        self._default_pose = self.sys.qpos0[7:]
-        self._action_scale = action_scale
+
+        self._lower_leg_idx = jp.array(
+            [
+                mujoco.mj_name2id(mj_model, mujoco.mju_str2Type("body"), body)
+                for body in lower_leg_names
+            ]
+        )
         self._nv = sys.nv
         self._nq = sys.nq
         self._nu = sys.nu
+        self._foot_radius = 0.00219
+        self._default_pose = self.sys.qpos0[7:]
+        self._action_scale = action_scale
         self._n_clips = 1
         self._clip_length = clip_length
         self._ref_len = ref_len
-        self._ref_dim = (7 + self._nu)*self._ref_len
+        self._ref_dim = (7 + self._nu) * self._ref_len
         self._prop_dim = self._nv + self._nq
         self._reference_clips = reference_clip
         self._reset_noise_scale = reset_noise_scale
@@ -664,19 +713,23 @@ class FlyRunSim(PipelineEnv):
         self._torques_weight = torques_weight
         self._action_rate_weight = action_rate_weight
         self._stand_still_weight = stand_still_weight
+        self._foot_slip_weight = foot_slip_weight
         self._termination_weight = termination_weight
         self._ctrl_cost_weight = ctrl_cost_weight
+        self._linvel_scaling = linvel_scaling
+        self._angvel_scaling = angvel_scaling
         self._healthy_z_range = healthy_z_range
         self._reset_noise_scale = reset_noise_scale
-        
+
     def reset(self, rng) -> State:
         """Resets the environment to an initial state."""
         _, start_rng, rng = jax.random.split(rng, 3)
 
         info = {
-            "clip_idx": 0, 
+            "clip_idx": 0,
             "cur_frame": 0,
             "command": jp.zeros(3),
+            "last_contact": jp.zeros(6, dtype=bool),
             "steps_taken_cur_frame": 0,
             "summed_pos_distance": 0.0,
             "quat_distance": 0.0,
@@ -684,6 +737,7 @@ class FlyRunSim(PipelineEnv):
             "angvel_distance": 0.0,
             "bodypos_distance": 0.0,
             "endeff_distance": 0.0,
+            "prev_ctrl": jp.zeros((self.sys.nu,)),
         }
 
         return self.reset_from_clip(rng, info)
@@ -691,19 +745,20 @@ class FlyRunSim(PipelineEnv):
     def reset_from_clip(self, rng, info) -> State:
         """Reset based on a reference clip."""
         rng0, rng1, rng2 = jax.random.split(rng, 3)
-        
+
         ##### Handle Additional Info #####
-        if 'last_act' not in info:
-            info['last_act'] = jp.zeros(self._nu)
-        if 'last_vel' not in info:
-            info['last_vel'] = jp.zeros(self._nv-7)
-        if 'rng' not in info:
-            info['rng'] = rng0
-        if 'command' not in info:
-            info['command'] = self.sample_command(info["rng"])
-        if 'step' not in info:
-            info['step'] = 0
-        
+        if "prev_ctrl" not in info:
+            info["prev_ctrl"] = jp.zeros(self._nu)
+        if "last_vel" not in info:
+            info["last_vel"] = jp.zeros(self._nv - 7)
+        if "las_contact" not in info:
+            info["last_contact"] = jp.zeros(6, dtype=bool)
+        if "rng" not in info:
+            info["rng"] = rng0
+        if "command" not in info:
+            info["command"] = self.sample_command(info["rng"])
+        if "step" not in info:
+            info["step"] = 0
 
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
 
@@ -723,24 +778,22 @@ class FlyRunSim(PipelineEnv):
 
         reward, done, zero = jp.zeros(3)
         metrics = {
-            'total_dist': zero,
-            'tracking_lin_vel': zero,
-            'tracking_ang_vel': zero,
-            'ang_vel_xy': zero,
-            'lin_vel_z': zero,
-            'orientation': zero,
-            'torques': zero,
-            'action_rate': zero,
-            'stand_still': zero,
-            'termination': zero,
+            "total_dist": zero,
+            "tracking_lin_vel": zero,
+            "tracking_ang_vel": zero,
+            "ang_vel_xy": zero,
+            "lin_vel_z": zero,
+            "orientation": zero,
+            "torques": zero,
+            "action_rate": zero,
+            "stand_still": zero,
+            "termination": zero,
         }
         return State(data, obs, reward, done, metrics, info)
-    
-
 
     def step(self, state: State, action: jp.ndarray) -> State:
         """Runs one timestep of the environment's dynamics."""
-        rng, cmd_rng = jax.random.split(state.info['rng'], 2)
+        rng, cmd_rng = jax.random.split(state.info["rng"], 2)
 
         data0 = state.pipeline_state
         # physics step
@@ -749,41 +802,60 @@ class FlyRunSim(PipelineEnv):
         # data = self.pipeline_step(data0, action)
 
         info = state.info.copy()
-        
+
         min_z, max_z = self._healthy_z_range
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] < min_z, 0.0, 1.0)
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] > max_z, 0.0, is_healthy)
         fall = 1.0 - is_healthy
-        
+
         joint_angles = data.q[7:]
         joint_vel = data.qd[7:]
         x, xd = data.x, data.xd
-        
-        reference_obs, proprioceptive_obs= self._get_obs(data, info, state.obs)
+
+        reference_obs, proprioceptive_obs = self._get_obs(data, info, state.obs)
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
 
-
         from jax.flatten_util import ravel_pytree
+
         flattened_vals, _ = ravel_pytree(data)
         num_nans = jp.sum(jp.isnan(flattened_vals))
         nan = jp.where(num_nans > 0, 1.0, 0.0)
         done = jp.max(jp.array([nan, fall]))
 
+        # foot contact data based on z-position
+        foot_pos = data.site_xpos[self._endeff_idxs]  # pytype: disable=attribute-error
+        foot_contact_z = foot_pos[:, 2] - self._foot_radius
+        contact = foot_contact_z < 1e-3  # a mm or less off the floor
+        contact_filt_mm = contact | state.info["last_contact"]
+        contact_filt_cm = (foot_contact_z < 3e-2) | state.info["last_contact"]
+
         # Tracking of linear velocity commands (xy axes)
         local_vel = brax_math.rotate(xd.vel[0], brax_math.quat_inv(x.rot[0]))
-        lin_vel_error = jp.sum(jp.square(info['command'][:2] - local_vel[:2]))
-        lin_vel_reward = jp.exp(-lin_vel_error / 0.25)
-        info['bodypos_distance'] = lin_vel_reward 
+        lin_vel_error = jp.sum(jp.square(info["command"][:2] - local_vel[:2]))
+        lin_vel_reward = jp.exp(-self._linvel_scaling * lin_vel_error)
+        info["bodypos_distance"] = lin_vel_reward
         tracking_lin_vel = self._tracking_lin_vel_weight * lin_vel_reward
-        tracking_ang_vel = self._tracking_ang_vel_weight * self._reward_tracking_ang_vel(info['command'], x, xd)
+        # tracking_lin_vel = self._tracking_lin_vel_weight * self._reward_tracking_lin_vel(info['command'], x, xd)
+        tracking_ang_vel = (
+            self._tracking_ang_vel_weight
+            * self._reward_tracking_ang_vel(info["command"], x, xd)
+        )
         ang_vel_xy = self._ang_vel_xy_weight * self._reward_ang_vel_xy(xd)
         lin_vel_z = self._lin_vel_z_weight * self._reward_lin_vel_z(xd)
         orientation = self._orientation_weight * self._reward_orientation(x)
         torques = self._torques_weight * self._reward_torques(data.qfrc_actuator)
-        action_rate = self._action_rate_weight * self._reward_action_rate(action, info["last_act"])
-        stand_still = self._stand_still_weight * self._reward_stand_still(info["command"],joint_angles,)
-        termination = self._termination_weight * self._reward_termination(done, info["step"])
-        
+        action_rate = self._action_rate_weight * self._reward_action_rate(
+            action, info["prev_ctrl"]
+        )
+        stand_still = self._stand_still_weight * self._reward_stand_still(
+            info["command"],
+            joint_angles,
+        )
+        termination = self._termination_weight * self._reward_termination(
+            done, info["step"]
+        )
+        foot_slip = self._reward_foot_slip(data, contact_filt_cm)
+
         reward = (
             tracking_lin_vel
             + tracking_ang_vel
@@ -793,29 +865,31 @@ class FlyRunSim(PipelineEnv):
             + torques
             + action_rate
             + stand_still
+            + foot_slip
             + termination
-        ) * self.dt
-        
+        )
 
         # Handle nans during sim by resetting env
         reward = jp.nan_to_num(reward)
         obs = jp.nan_to_num(obs)
 
         # state management
-        info["last_act"] = action
+        info["prev_ctrl"] = action
         info["last_vel"] = joint_vel
         info["step"] += 1
         info["rng"] = rng
+        info['last_contact'] = contact
 
-        # sample new command if more than 500 timesteps achieved
-        state.info['command'] = jp.where(
-            info['step'] > 500,
+        # sample new command if more than half the clip timesteps achieved
+        state.info["command"] = jp.where(
+            info["step"] > self._clip_length//2,
             self.sample_command(cmd_rng),
-            info['command'],
+            info["command"],
         )
         # reset the step counter when done
-        info["step"] = jp.where((done>0.5) | (info["step"] > self._clip_length), 0, info["step"])
-
+        info["step"] = jp.where(
+            (done > 0.5) | (info["step"] > self._clip_length), 0, info["step"]
+        )
 
         state.metrics.update(
             total_dist=brax_math.normalize(x.pos[self._thorax_idx])[1],
@@ -829,31 +903,40 @@ class FlyRunSim(PipelineEnv):
             stand_still=stand_still,
             termination=termination,
         )
-        return state.replace(pipeline_state=data, obs=obs, reward=reward, done=done, info=info)
+        return state.replace(
+            pipeline_state=data, obs=obs, reward=reward, done=done, info=info
+        )
 
     def _get_reference_clip(self, info) -> ReferenceClip:
         """Gets clip based on info["clip_idx"]"""
         return jax.tree_map(lambda x: x[info["clip_idx"]], self._reference_clips)
 
-    def _get_obs(self, data: mjx.Data, info, obs_history: jax.Array=None) -> jp.ndarray:
+    def _get_obs(
+        self, data: mjx.Data, info, obs_history: jax.Array = None
+    ) -> jp.ndarray:
         """Observes rodent body position, velocities, and angles."""
-        
+
         if obs_history is None:
             obs_history = jp.zeros(self._ref_dim)
         else:
-            obs_history = obs_history[:self._ref_dim]
-            
+            obs_history = obs_history[: self._ref_dim]
+
         inv_torso_rot = brax_math.quat_inv(data.x.rot[0])
         local_rpyrate = brax_math.rotate(data.xd.ang[0], inv_torso_rot)
 
         # stack observations through time
-        obs = jp.concatenate([
-            jp.array([local_rpyrate[2]]) * 0.25,           # yaw rate (1)
-            brax_math.rotate(jp.array([0, 0, -1]), inv_torso_rot),    # projected gravity (3)
-            info['command'] * jp.array([2.0, 2.0, 0.25]),  # command (3)
-            info['last_act'],                              # last action (self.nu)
-        ])
-        reference_obs = jp.roll(obs_history, obs.size).at[:obs.size].set(obs)
+        obs = jp.concatenate(
+            [
+                jp.array([local_rpyrate[2]]) * 0.25,  # yaw rate (1)
+                brax_math.rotate(
+                    jp.array([0, 0, -1]), inv_torso_rot
+                ),  # projected gravity (3)
+                info["command"] * jp.array([2.0, 2.0, 0.25]),  # command (3)
+                info["prev_ctrl"],  # last action (self.nu)
+            ]
+        )
+
+        reference_obs = jp.roll(obs_history, obs.size).at[: obs.size].set(obs)
 
         proprioceptive_obs = jp.concatenate(
             [
@@ -861,15 +944,15 @@ class FlyRunSim(PipelineEnv):
                 data.qvel,
             ]
         )
-        
+
         return reference_obs, proprioceptive_obs
-        
+
     def sample_command(self, rng: jax.Array) -> jax.Array:
         lin_vel_x = [0.02, 0.2]  # min max [m/s]
-        # lin_vel_y = [-0.8, 0.8]  # min max [m/s]
-        # ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
+        lin_vel_y = [-0.02, 0.2]  # min max [m/s]
+        ang_vel_yaw = [-0.02, 0.2]  # min max [rad/s]
 
-        _, key1 = jax.random.split(rng, 2)
+        _, key1,key2,key3 = jax.random.split(rng, 4)
         lin_vel_x = jax.random.uniform(
             key1, (1,), minval=lin_vel_x[0], maxval=lin_vel_x[1]
         )
@@ -880,7 +963,7 @@ class FlyRunSim(PipelineEnv):
         #     key3, (1,), minval=ang_vel_yaw[0], maxval=ang_vel_yaw[1]
         # )
 
-        return jp.array([lin_vel_x[0], 0, 0])
+        return jp.array([lin_vel_x[0],0,0])
 
     # ------------ reward functions----------------
     def _reward_lin_vel_z(self, xd: Motion) -> jax.Array:
@@ -901,9 +984,9 @@ class FlyRunSim(PipelineEnv):
         # Penalize torques
         return jp.sqrt(jp.sum(jp.square(torques))) + jp.sum(jp.abs(torques))
 
-    def _reward_action_rate(self, act: jax.Array, last_act: jax.Array) -> jax.Array:
+    def _reward_action_rate(self, act: jax.Array, prev_ctrl: jax.Array) -> jax.Array:
         # Penalize changes in actions
-        return jp.sum(jp.square(act - last_act))
+        return jp.sum(jp.square(act - prev_ctrl))
 
     def _reward_tracking_lin_vel(
         self, commands: jax.Array, x: Transform, xd: Motion
@@ -911,7 +994,7 @@ class FlyRunSim(PipelineEnv):
         # Tracking of linear velocity commands (xy axes)
         local_vel = brax_math.rotate(xd.vel[0], brax_math.quat_inv(x.rot[0]))
         lin_vel_error = jp.sum(jp.square(commands[:2] - local_vel[:2]))
-        lin_vel_reward = jp.exp(-lin_vel_error / 0.25)
+        lin_vel_reward = jp.exp(-self._linvel_scaling * lin_vel_error)
         return lin_vel_reward
 
     def _reward_tracking_ang_vel(
@@ -920,7 +1003,7 @@ class FlyRunSim(PipelineEnv):
         # Tracking of angular velocity commands (yaw)
         base_ang_vel = brax_math.rotate(xd.ang[0], brax_math.quat_inv(x.rot[0]))
         ang_vel_error = jp.square(commands[2] - base_ang_vel[2])
-        return jp.exp(-ang_vel_error / 0.25)
+        return jp.exp(-self._angvel_scaling * ang_vel_error)
 
     def _reward_stand_still(
         self,
@@ -933,7 +1016,22 @@ class FlyRunSim(PipelineEnv):
         )
 
     def _reward_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
-        return (done>0.5) & (step < self._clip_length)
+        return (done > 0.5) & (step < self._clip_length)
+
+    def _reward_foot_slip(
+        self, pipeline_state: State, contact_filt: jax.Array
+    ) -> jax.Array:
+        # get velocities at feet which are offset from lower legs
+        # pytype: disable=attribute-error
+        pos = pipeline_state.site_xpos[self._endeff_idxs]  # feet position
+        feet_offset = pos - pipeline_state.xpos[self._lower_leg_idx]
+        # pytype: enable=attribute-error
+        offset = Transform.create(pos=feet_offset)
+        foot_indices = self._lower_leg_idx - 1  # we got rid of the world body
+        foot_vel = offset.vmap().do(pipeline_state.xd.take(foot_indices)).vel
+
+        # Penalize large feet velocity for feet that are in contact with the ground.
+        return jp.sum(jp.square(foot_vel[:, :2]) * contact_filt.reshape((-1, 1)))
 
     def render(
         self,
@@ -951,4 +1049,3 @@ class FlyRunSim(PipelineEnv):
             height=height,
             scene_option=scene_option,
         )
-

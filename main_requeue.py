@@ -91,6 +91,7 @@ def main(cfg: DictConfig) -> None:
     ########## Handling requeuing ##########
     if ('restore_checkpoint' in cfg) and (cfg['load_restore_checkpointjobid'] is not None) and (cfg['restore_checkpoint'] !=''):
         restore_checkpoint = cfg.restore_checkpoint
+        network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
         print('Loading from ckpt:', restore_checkpoint)
     else: 
         try: #
@@ -116,6 +117,7 @@ def main(cfg: DictConfig) -> None:
             # Otherwise bootstrap (start from scratch)
             print('Model path does not exist. Starting from scratch.')
             restore_checkpoint = None
+        network_type = custom_ppo_networks.make_intention_ppo_networks
 
     while not interrupted and not converged:
         # Init env
@@ -124,12 +126,13 @@ def main(cfg: DictConfig) -> None:
             reference_clip=reference_clip,
             **env_args,
         )
+        
         def create_mask():
             from custom_brax.custom_losses import PPONetworkParams
-            mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder'}}
+            mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder', 'bottleneck':'encoder'}}
             value = {'params': 'encoder'}
             return PPONetworkParams(mask,value)
-
+        
 
         episode_length = (env_args.clip_length - 50 - env_args.ref_len) * env._steps_for_cur_frame
         print(f"episode_length {episode_length}")
@@ -156,7 +159,7 @@ def main(cfg: DictConfig) -> None:
             batch_size=cfg.train["batch_size"],
             seed=cfg.train['seed'],
             network_factory=functools.partial(
-                custom_ppo_networks.make_intention_ppo_networks,
+                network_type,
                 encoder_hidden_layer_sizes=cfg.train['encoder_hidden_layer_sizes'],
                 decoder_hidden_layer_sizes=cfg.train['decoder_hidden_layer_sizes'],
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
