@@ -8,7 +8,7 @@ task_name: ${dataset.dname}
 note: 
 num_envs: 1024 
 num_timesteps: 10_000_000_000
-eval_every: 100_000_000
+eval_every: 200_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001
@@ -24,6 +24,7 @@ kl_weight: 1e-3
 entropy_cost: 1e-2
 batch_size: ${train.num_envs}
 seed: 0
+network_type: encoderdecoder
 encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]

@@ -89,9 +89,8 @@ def main(cfg: DictConfig) -> None:
     global EVAL_STEPS
     EVAL_STEPS = 0
     ########## Handling requeuing ##########
-    if ('restore_checkpoint' in cfg) and (cfg['load_restore_checkpointjobid'] is not None) and (cfg['restore_checkpoint'] !=''):
+    if ('restore_checkpoint' in cfg) and (cfg['jobid'] is not None) and (cfg['restore_checkpoint'] !=''):
         restore_checkpoint = cfg.restore_checkpoint
-        network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
         print('Loading from ckpt:', restore_checkpoint)
     else: 
         try: #
@@ -117,7 +116,12 @@ def main(cfg: DictConfig) -> None:
             # Otherwise bootstrap (start from scratch)
             print('Model path does not exist. Starting from scratch.')
             restore_checkpoint = None
+    if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
+        network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
+        network_mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder', 'bottleneck':'encoder'}}
+    else: 
         network_type = custom_ppo_networks.make_intention_ppo_networks
+        network_mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder'}}
 
     while not interrupted and not converged:
         # Init env
@@ -127,9 +131,9 @@ def main(cfg: DictConfig) -> None:
             **env_args,
         )
         
-        def create_mask():
+        def create_mask(network_mask):
             from custom_brax.custom_losses import PPONetworkParams
-            mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder', 'bottleneck':'encoder'}}
+            mask = network_mask
             value = {'params': 'encoder'}
             return PPONetworkParams(mask,value)
         
@@ -165,7 +169,7 @@ def main(cfg: DictConfig) -> None:
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
             ),
             restore_checkpoint_path=restore_checkpoint,
-            freeze_fn=None if (cfg.train['freeze_encoder'] == False) else create_mask,
+            freeze_fn=None if (cfg.train['freeze_encoder'] == False) else functools.partial(create_mask,network_mask=network_mask),
         )
 
 
