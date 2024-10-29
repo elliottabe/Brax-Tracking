@@ -33,11 +33,14 @@ freeze_encoder: True
 state_metric_list: 
   - total_dist
   - tracking_lin_vel
+  - tracking_ang_vel
   - ang_vel_xy
   - lin_vel_z
   - orientation
   - torques
   - action_rate
   - stand_still
+  - foot_slip
   - termination
-info_metric_list: []
+info_metric_list: 
+  - bodypos_distance

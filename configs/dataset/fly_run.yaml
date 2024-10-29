@@ -14,17 +14,24 @@ env_args:
   torque_actuators: True
   physics_steps_per_control_step: 10
   tracking_lin_vel_weight: 1.5
-  tracking_ang_vel_weight:  0
-  lin_vel_z_weight: -2.0
-  ang_vel_xy_weight: -0.05
-  orientation_weight: -5.0
+  tracking_ang_vel_weight: 0.8
+  lin_vel_z_weight: -5e-5
+  ang_vel_xy_weight: -1e-3
+  orientation_weight: 1.0
   torques_weight: -0.0002
   action_rate_weight: -0.01
   stand_still_weight: -0.5
   foot_slip_weight: -0.1
   termination_weight: -1.0
-  linvel_scaling: 400.0
-  angvel_scaling: 4.0
+  linvel_scaling: 0.1
+  angvel_scaling: 0.1
+  ang_vel_xy_scaling: -1.0
+  lin_vel_z_scaling: -1.0
+  orientation_scaling: 5.0
+  torques_scaling: -1.0
+  action_rate_scaling: -1.0
+  stand_still_scaling: -1.0
+  foot_slip_scaling: -1.0
   healthy_z_range: [-0.03, 0.1]
   reset_noise_scale: 1e-3
   ref_len: 5

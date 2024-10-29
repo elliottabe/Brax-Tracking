@@ -118,10 +118,10 @@ def main(cfg: DictConfig) -> None:
             restore_checkpoint = None
     if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
         network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
-        network_mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder', 'bottleneck':'encoder'}}
+        network_mask = {'params': {'encoder': 'learned', 'decoder': 'frozen', 'bottleneck':'learned'}}
     else: 
         network_type = custom_ppo_networks.make_intention_ppo_networks
-        network_mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder'}}
+        network_mask = {'params': {'encoder': 'learned', 'decoder': 'frozen'}}
 
     while not interrupted and not converged:
         # Init env
@@ -132,9 +132,17 @@ def main(cfg: DictConfig) -> None:
         )
         
         def create_mask(network_mask):
+            """Creates mask for freezing sets of parameters
+
+            Args:
+                network_mask (dict): dictionary for freezing part of the policy
+
+            Returns:
+                PPONetworkParams: returns the parameters of the PPONetwork
+            """
             from custom_brax.custom_losses import PPONetworkParams
             mask = network_mask
-            value = {'params': 'encoder'}
+            value = {'params': 'learned'}
             return PPONetworkParams(mask,value)
         
 

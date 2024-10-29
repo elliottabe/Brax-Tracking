@@ -600,19 +600,25 @@ class FlyRunSim(PipelineEnv):
         mjcf_path: str = "./assets/fruitfly/fruitfly_force_fast.xml",
         clip_length: int = 1000,
         obs_noise: float = 0.05,
-        ctrl_cost_weight=0.01,
         tracking_lin_vel_weight=1.5,
         tracking_ang_vel_weight=0.8,
-        lin_vel_z_weight=-2.0,
-        ang_vel_xy_weight=-0.05,
-        orientation_weight=-5.0,
+        lin_vel_z_weight=-5e-5,
+        ang_vel_xy_weight=-1e-3,
+        orientation_weight=0.5,
         torques_weight=-0.0002,
         action_rate_weight=-0.01,
         stand_still_weight=-0.5,
         foot_slip_weight=-0.1,
         termination_weight=-1.0,
-        linvel_scaling=400.0,
-        angvel_scaling=4.0,
+        linvel_scaling=0.1,
+        angvel_scaling=0.1,
+        ang_vel_xy_scaling=-1.0,
+        lin_vel_z_scaling=-1.0,
+        orientation_scaling=-1.0,
+        torques_scaling=-1.0,
+        action_rate_scaling=-1.0,
+        stand_still_scaling=-1.0,
+        foot_slip_scaling=-1.0,
         healthy_z_range=(-0.05, 0.1),
         physics_steps_per_control_step=10,
         reset_noise_scale=1e-3,
@@ -715,9 +721,15 @@ class FlyRunSim(PipelineEnv):
         self._stand_still_weight = stand_still_weight
         self._foot_slip_weight = foot_slip_weight
         self._termination_weight = termination_weight
-        self._ctrl_cost_weight = ctrl_cost_weight
         self._linvel_scaling = linvel_scaling
         self._angvel_scaling = angvel_scaling
+        self._lin_vel_z_scaling = lin_vel_z_scaling
+        self._ang_vel_xy_scaling = ang_vel_xy_scaling
+        self._orientation_scaling = orientation_scaling
+        self._torques_scaling = torques_scaling
+        self._action_rate_scaling=action_rate_scaling
+        self._stand_still_scaling = stand_still_scaling
+        self._foot_slip_scaling = foot_slip_scaling
         self._healthy_z_range = healthy_z_range
         self._reset_noise_scale = reset_noise_scale
 
@@ -787,6 +799,7 @@ class FlyRunSim(PipelineEnv):
             "torques": zero,
             "action_rate": zero,
             "stand_still": zero,
+            "foot_slip": zero,
             "termination": zero,
         }
         return State(data, obs, reward, done, metrics, info)
@@ -802,15 +815,17 @@ class FlyRunSim(PipelineEnv):
         # data = self.pipeline_step(data0, action)
 
         info = state.info.copy()
+        joint_angles = data.q[7:]
+        joint_vel = data.qd[7:]
+        x, xd = data.x, data.xd
 
         min_z, max_z = self._healthy_z_range
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] < min_z, 0.0, 1.0)
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] > max_z, 0.0, is_healthy)
         fall = 1.0 - is_healthy
-
-        joint_angles = data.q[7:]
-        joint_vel = data.qd[7:]
-        x, xd = data.x, data.xd
+        up = jp.array([0.0, 0.0, 1.0])
+        done = jp.int32(jp.dot(brax_math.rotate(up, x.rot[self._thorax_idx - 1]), up) < 0)
+        
 
         reference_obs, proprioceptive_obs = self._get_obs(data, info, state.obs)
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
@@ -820,7 +835,7 @@ class FlyRunSim(PipelineEnv):
         flattened_vals, _ = ravel_pytree(data)
         num_nans = jp.sum(jp.isnan(flattened_vals))
         nan = jp.where(num_nans > 0, 1.0, 0.0)
-        done = jp.max(jp.array([nan, fall]))
+        done = jp.max(jp.array([nan, fall, done]))
 
         # foot contact data based on z-position
         foot_pos = data.site_xpos[self._endeff_idxs]  # pytype: disable=attribute-error
@@ -831,30 +846,31 @@ class FlyRunSim(PipelineEnv):
 
         # Tracking of linear velocity commands (xy axes)
         local_vel = brax_math.rotate(xd.vel[0], brax_math.quat_inv(x.rot[0]))
-        lin_vel_error = jp.sum(jp.square(info["command"][:2] - local_vel[:2]))
+        # lin_vel_error = jp.sum(jp.square(info["command"][:2] - local_vel[:2]))
+        lin_vel_error = jp.sum(jp.square(info["command"][:2] - xd.vel[0,:2]))
         lin_vel_reward = jp.exp(-self._linvel_scaling * lin_vel_error)
-        info["bodypos_distance"] = lin_vel_reward
+        info["bodypos_distance"] = lin_vel_error
         tracking_lin_vel = self._tracking_lin_vel_weight * lin_vel_reward
         # tracking_lin_vel = self._tracking_lin_vel_weight * self._reward_tracking_lin_vel(info['command'], x, xd)
         tracking_ang_vel = (
             self._tracking_ang_vel_weight
             * self._reward_tracking_ang_vel(info["command"], x, xd)
         )
-        ang_vel_xy = self._ang_vel_xy_weight * self._reward_ang_vel_xy(xd)
-        lin_vel_z = self._lin_vel_z_weight * self._reward_lin_vel_z(xd)
-        orientation = self._orientation_weight * self._reward_orientation(x)
-        torques = self._torques_weight * self._reward_torques(data.qfrc_actuator)
-        action_rate = self._action_rate_weight * self._reward_action_rate(
+        ang_vel_xy = jp.clip(self._ang_vel_xy_weight * self._reward_ang_vel_xy(xd),self._ang_vel_xy_scaling,0)
+        lin_vel_z = jp.clip(self._lin_vel_z_weight * self._reward_lin_vel_z(xd),self._lin_vel_z_scaling,0)
+        orientation = self._orientation_weight * jp.exp(-self._orientation_scaling*self._reward_orientation(x))
+        torques = jp.clip(self._torques_weight * self._reward_torques(data.qfrc_actuator),self._torques_scaling,0)
+        action_rate = jp.clip(self._action_rate_weight * self._reward_action_rate(
             action, info["prev_ctrl"]
-        )
-        stand_still = self._stand_still_weight * self._reward_stand_still(
+        ), self._action_rate_scaling,0)
+        stand_still = jp.clip(self._stand_still_weight * self._reward_stand_still(
             info["command"],
             joint_angles,
-        )
+        ),self._stand_still_scaling,0)
+        foot_slip = jp.clip(self._foot_slip_weight*self._reward_foot_slip(data, contact_filt_cm),self._foot_slip_scaling,0)
         termination = self._termination_weight * self._reward_termination(
             done, info["step"]
         )
-        foot_slip = self._reward_foot_slip(data, contact_filt_cm)
 
         reward = (
             tracking_lin_vel
@@ -867,12 +883,13 @@ class FlyRunSim(PipelineEnv):
             + stand_still
             + foot_slip
             + termination
-        )
+        ) * self.dt
 
         # Handle nans during sim by resetting env
         reward = jp.nan_to_num(reward)
+        # reward =  jp.clip(reward,0.0,10000.0)
         obs = jp.nan_to_num(obs)
-
+        
         # state management
         info["prev_ctrl"] = action
         info["last_vel"] = joint_vel
@@ -901,6 +918,7 @@ class FlyRunSim(PipelineEnv):
             torques=torques,
             action_rate=action_rate,
             stand_still=stand_still,
+            foot_slip=foot_slip,
             termination=termination,
         )
         return state.replace(
@@ -948,7 +966,7 @@ class FlyRunSim(PipelineEnv):
         return reference_obs, proprioceptive_obs
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
-        lin_vel_x = [0.02, 0.2]  # min max [m/s]
+        lin_vel_x = [0.1, 0.2]  # min max [m/s]
         lin_vel_y = [-0.02, 0.2]  # min max [m/s]
         ang_vel_yaw = [-0.02, 0.2]  # min max [rad/s]
 

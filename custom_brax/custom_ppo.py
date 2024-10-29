@@ -255,8 +255,8 @@ def train(
     if freeze_fn is not None:
         optimizer = optax.multi_transform(
                     {
-                     'encoder': optax.adam(learning_rate=learning_rate), 
-                     'decoder': optax.set_to_zero()
+                     'learned': optax.adam(learning_rate=learning_rate), 
+                     'frozen': optax.set_to_zero()
                      },
                     freeze_fn()
                     )
