@@ -112,7 +112,7 @@ def train(
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
-    freeze_fn: Optional[Callable] = None,
+    freeze_mask_fn: Optional[Callable] = None,
     restore_checkpoint_path: Optional[str] = None,
 
 ):
@@ -164,7 +164,7 @@ def train(
       randomization_fn: a user-defined callback function that generates randomized
         environments
       restore_checkpoint_path: the path used to restore previous model params
-
+      freeze_mask_fn: freeze specific layers of the PPONetwork. 
     Returns:
       Tuple of (make_policy function, network params, metrics)
     """
@@ -252,13 +252,13 @@ def train(
     )
     make_policy = custom_ppo_networks.make_inference_fn(ppo_network)
 
-    if freeze_fn is not None:
+    if freeze_mask_fn is not None:
         optimizer = optax.multi_transform(
                     {
                      'learned': optax.adam(learning_rate=learning_rate), 
                      'frozen': optax.set_to_zero()
                      },
-                    freeze_fn()
+                    freeze_mask_fn(init_params),
                     )
         logging.info("Freezing layers")
     else:
@@ -442,7 +442,7 @@ def train(
         target = training_state.normalizer_params, init_params, training_state.env_steps
         (normalizer_params, load_params, env_steps) = orbax_checkpointer.restore(
             restore_checkpoint_path, item=target, restore_args=flax.training.orbax_utils.restore_args_from_target(target, mesh=None))
-        if freeze_fn is not None:
+        if freeze_mask_fn is not None:
             load_params.policy['params']['encoder'] = init_params.policy['params']['encoder']
             init_params = init_params.replace(policy=load_params.policy, value=load_params.value)
         else:

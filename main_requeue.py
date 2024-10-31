@@ -23,6 +23,7 @@ from brax.training.agents.ppo import networks as ppo_networks
 from custom_brax import custom_ppo as ppo
 from custom_brax import custom_wrappers
 from custom_brax import custom_ppo_networks
+from custom_brax import network_masks as masks
 from orbax import checkpoint as ocp
 from flax.training import orbax_utils
 # from envs.rodent import RodentSingleClip
@@ -118,10 +119,8 @@ def main(cfg: DictConfig) -> None:
             restore_checkpoint = None
     if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
         network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
-        network_mask = {'params': {'encoder':'learned', 'bottleneck':'learned', 'decoder':'frozen'}}
     else: 
         network_type = custom_ppo_networks.make_intention_ppo_networks
-        network_mask = {'params': {'encoder':'learned', 'latent':'learned', 'decoder':'frozen'}}
 
     while not interrupted and not converged:
         # Init env
@@ -130,21 +129,6 @@ def main(cfg: DictConfig) -> None:
             reference_clip=reference_clip,
             **env_args,
         )
-        
-        def create_mask(network_mask):
-            """Creates mask for freezing sets of parameters
-
-            Args:
-                network_mask (dict): dictionary for freezing part of the policy
-
-            Returns:
-                PPONetworkParams: returns the parameters of the PPONetwork
-            """
-            from custom_brax.custom_losses import PPONetworkParams
-            mask = network_mask
-            value = {'params': 'learned'}
-            return PPONetworkParams(mask,value)
-        
 
         episode_length = (env_args.clip_length - 50 - env_args.ref_len) * env._steps_for_cur_frame
         print(f"episode_length {episode_length}")
@@ -177,7 +161,7 @@ def main(cfg: DictConfig) -> None:
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
             ),
             restore_checkpoint_path=restore_checkpoint,
-            freeze_fn= None if (cfg.train['freeze_decoder'] == False) else functools.partial(create_mask,network_mask=network_mask),
+            freeze_mask_fn=None if (cfg.train['freeze_decoder'] == False) else masks.create_decoder_mask,
         )
 
 
