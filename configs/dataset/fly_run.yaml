@@ -9,22 +9,26 @@ env_args:
   mjcf_path: "${paths.cwd_dir}/assets/fruitfly/fruitfly_force_fast.xml" 
   physics_timestep: 2e-4
   solver: cg
-  iterations: 12
-  ls_iterations: 12
+  iterations: 8
+  ls_iterations: 8
   torque_actuators: True
   physics_steps_per_control_step: 10
-  tracking_lin_vel_weight: 1.5
-  tracking_ang_vel_weight: 0.8
-  lin_vel_z_weight: -5e-5
-  ang_vel_xy_weight: -1e-3
+  too_far_dist: 0.01
+  bad_pose_dist: 10.0
+  pos_reward_weight: 1.0 
+  tracking_lin_vel_weight: 0.0
+  tracking_ang_vel_weight: 0.0
+  lin_vel_z_weight: 0.0
+  ang_vel_xy_weight: 0.0
   orientation_weight: 1.0
-  torques_weight: -0.0002
-  action_rate_weight: -0.01
-  stand_still_weight: -0.5
-  foot_slip_weight: -0.1
-  termination_weight: -1.0
-  linvel_scaling: 0.1
-  angvel_scaling: 0.1
+  torques_weight: 0.0
+  action_rate_weight: 0.0
+  stand_still_weight: 0.0
+  foot_slip_weight: 0.0
+  termination_weight: 1.0
+  pos_scaling: 200.0
+  linvel_scaling: 400.0
+  angvel_scaling: 4.0
   ang_vel_xy_scaling: -1.0
   lin_vel_z_scaling: -1.0
   orientation_scaling: 5.0

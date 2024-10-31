@@ -438,7 +438,6 @@ def train(
         and epath.Path(restore_checkpoint_path).exists()
     ):
         logging.info("restoring from checkpoint %s", restore_checkpoint_path)
-        # env_steps = int(epath.Path(restore_checkpoint_path).stem)
         orbax_checkpointer = ocp.PyTreeCheckpointer()
         target = training_state.normalizer_params, init_params, training_state.env_steps
         (normalizer_params, load_params, env_steps) = orbax_checkpointer.restore(
@@ -448,10 +447,10 @@ def train(
             init_params = init_params.replace(policy=load_params.policy, value=load_params.value)
         else:
             init_params = init_params.replace(policy=load_params.policy, value=load_params.value)
-        training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
+        training_state = TrainingState(  
             optimizer_state=optimizer.init(
                 init_params
-            ),  # pytype: disable=wrong-arg-types  # numpy-scalars
+            ), 
             params=init_params,
             normalizer_params=normalizer_params,
             env_steps=env_steps,)

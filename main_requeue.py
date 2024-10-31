@@ -118,10 +118,10 @@ def main(cfg: DictConfig) -> None:
             restore_checkpoint = None
     if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
         network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
-        network_mask = {'params': {'encoder': 'learned', 'decoder': 'frozen', 'bottleneck':'learned'}}
+        network_mask = {'params': {'encoder':'learned', 'bottleneck':'learned', 'decoder':'frozen'}}
     else: 
         network_type = custom_ppo_networks.make_intention_ppo_networks
-        network_mask = {'params': {'encoder': 'learned', 'decoder': 'frozen'}}
+        network_mask = {'params': {'encoder':'learned', 'latent':'learned', 'decoder':'frozen'}}
 
     while not interrupted and not converged:
         # Init env
@@ -177,7 +177,7 @@ def main(cfg: DictConfig) -> None:
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
             ),
             restore_checkpoint_path=restore_checkpoint,
-            freeze_fn=None if (cfg.train['freeze_encoder'] == False) else functools.partial(create_mask,network_mask=network_mask),
+            freeze_fn= None if (cfg.train['freeze_decoder'] == False) else functools.partial(create_mask,network_mask=network_mask),
         )
 
 

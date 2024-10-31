@@ -209,17 +209,7 @@ class FlyTracking(PipelineEnv):
 
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
 
-        # Add pos
-        # qpos_with_pos = jp.array(self.sys.qpos0).at[:3].set(reference_frame.position)
-
-        # # Add quat
-        # new_qpos = qpos_with_pos.at[3:7].set(reference_frame.quaternion)
-
-        # # Add noise
-        # qpos = new_qpos + jax.random.uniform(
-        #     rng1, (self.sys.nq,), minval=low, maxval=hi
-        # )
-        # qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
+        # New pos from reference clip
         new_qpos = jp.concatenate(
             (
                 reference_frame.position,
@@ -231,10 +221,11 @@ class FlyTracking(PipelineEnv):
         qpos = new_qpos + jax.random.uniform(
             rng1, (self.sys.nq,), minval=low, maxval=hi
         )
+        # Randomly sample velocities 
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
-        # qvel = jp.zeros((self.sys.nv))
+        # Physics step
         data = self.pipeline_init(qpos, qvel)
-
+        # Grab observations
         reference_obs, proprioceptive_obs = self._get_obs(data, info)
 
         # Used to intialize our intention network
@@ -243,6 +234,7 @@ class FlyTracking(PipelineEnv):
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
 
         reward, done, zero = jp.zeros(3)
+        # Initialize metrics
         metrics = {
             "pos_reward": zero,
             "quat_reward": zero,
@@ -600,21 +592,25 @@ class FlyRunSim(PipelineEnv):
         mjcf_path: str = "./assets/fruitfly/fruitfly_force_fast.xml",
         clip_length: int = 1000,
         obs_noise: float = 0.05,
+        too_far_dist=0.01,
+        bad_pose_dist=10.0,
+        pos_reward_weight=1.0,
         tracking_lin_vel_weight=1.5,
         tracking_ang_vel_weight=0.8,
         lin_vel_z_weight=-5e-5,
         ang_vel_xy_weight=-1e-3,
-        orientation_weight=0.5,
+        orientation_weight=1.0,
         torques_weight=-0.0002,
         action_rate_weight=-0.01,
         stand_still_weight=-0.5,
         foot_slip_weight=-0.1,
         termination_weight=-1.0,
+        pos_scaling=200.0, 
         linvel_scaling=0.1,
         angvel_scaling=0.1,
         ang_vel_xy_scaling=-1.0,
         lin_vel_z_scaling=-1.0,
-        orientation_scaling=-1.0,
+        orientation_scaling=5.0,
         torques_scaling=-1.0,
         action_rate_scaling=-1.0,
         stand_still_scaling=-1.0,
@@ -622,7 +618,7 @@ class FlyRunSim(PipelineEnv):
         healthy_z_range=(-0.05, 0.1),
         physics_steps_per_control_step=10,
         reset_noise_scale=1e-3,
-        action_scale: float = 1.0,
+        action_scale: float = 0.3,
         physics_timestep: float = 2e-4,
         solver="cg",
         iterations: int = 6,
@@ -698,7 +694,10 @@ class FlyRunSim(PipelineEnv):
         self._nv = sys.nv
         self._nq = sys.nq
         self._nu = sys.nu
+        self._too_far_dist = too_far_dist
+        self._bad_pose_dist = bad_pose_dist
         self._foot_radius = 0.00219
+        self._init_pos = self.sys.qpos0[:3]
         self._default_pose = self.sys.qpos0[7:]
         self._action_scale = action_scale
         self._n_clips = 1
@@ -711,6 +710,7 @@ class FlyRunSim(PipelineEnv):
         self._physics_timestep = physics_timestep
         self._free_jnt = free_jnt
         self._inference_mode = inference_mode
+        self._pos_reward_weight = pos_reward_weight
         self._tracking_lin_vel_weight = tracking_lin_vel_weight
         self._tracking_ang_vel_weight = tracking_ang_vel_weight
         self._lin_vel_z_weight = lin_vel_z_weight
@@ -721,6 +721,7 @@ class FlyRunSim(PipelineEnv):
         self._stand_still_weight = stand_still_weight
         self._foot_slip_weight = foot_slip_weight
         self._termination_weight = termination_weight
+        self._pos_scaling = pos_scaling
         self._linvel_scaling = linvel_scaling
         self._angvel_scaling = angvel_scaling
         self._lin_vel_z_scaling = lin_vel_z_scaling
@@ -771,6 +772,8 @@ class FlyRunSim(PipelineEnv):
             info["command"] = self.sample_command(info["rng"])
         if "step" not in info:
             info["step"] = 0
+        if 'last_pos' not in info:
+            info['last_pos'] = 0
 
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
 
@@ -800,7 +803,7 @@ class FlyRunSim(PipelineEnv):
             "action_rate": zero,
             "stand_still": zero,
             "foot_slip": zero,
-            "termination": zero,
+            "termination": 1.0,
         }
         return State(data, obs, reward, done, metrics, info)
 
@@ -823,19 +826,40 @@ class FlyRunSim(PipelineEnv):
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] < min_z, 0.0, 1.0)
         is_healthy = jp.where(data.xpos[self._thorax_idx][2] > max_z, 0.0, is_healthy)
         fall = 1.0 - is_healthy
-        up = jp.array([0.0, 0.0, 1.0])
-        done = jp.int32(jp.dot(brax_math.rotate(up, x.rot[self._thorax_idx - 1]), up) < 0)
+        # up = jp.array([0.0, 0.0, 1.0])
+        # done = jp.int32(jp.dot(brax_math.rotate(up, x.rot[self._thorax_idx - 1]), up) < 0)
         
 
         reference_obs, proprioceptive_obs = self._get_obs(data, info, state.obs)
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
 
+        ##### Tracking position from velocity #####
+        target_pos = self._init_pos + info['step']*jp.concatenate((info['command'][:2],jp.zeros(1)))*self.dt
+        pos_distance = (data.qpos[:3] - target_pos)
+        pos_reward = self._pos_reward_weight * jp.exp(
+            -self._pos_scaling * jp.sum(pos_distance**2)
+        )
+        summed_pos_distance = jp.sum((pos_distance * jp.array([1.0, 1.0, 0.2])) ** 2)
+        too_far = jp.where(summed_pos_distance > self._too_far_dist, 1.0, 0.0)
+        info["summed_pos_distance"] = summed_pos_distance
+        ##### Tracking joint positions #####
+        joint_distance = jp.sum((data.qpos[7:] - self._default_pose) ** 2)
+        bad_pose = jp.where(joint_distance > self._bad_pose_dist, 1.0, 0.0)
+        info['joint_distance'] = joint_distance
+        # ##### Tracking quaternion flat orientation ######
+        # quat_distance = jp.sum(
+        #     _bounded_quat_dist(data.qpos[3:7], jp.array()) ** 2
+        # )
+        # quat_reward = self._quat_reward_weight * jp.exp(
+        #     -self._quat_scaling * quat_distance
+        # )
+        
+        
         from jax.flatten_util import ravel_pytree
-
         flattened_vals, _ = ravel_pytree(data)
         num_nans = jp.sum(jp.isnan(flattened_vals))
         nan = jp.where(num_nans > 0, 1.0, 0.0)
-        done = jp.max(jp.array([nan, fall, done]))
+        done = jp.max(jp.array([nan, fall, too_far, bad_pose]))
 
         # foot contact data based on z-position
         foot_pos = data.site_xpos[self._endeff_idxs]  # pytype: disable=attribute-error
@@ -846,8 +870,7 @@ class FlyRunSim(PipelineEnv):
 
         # Tracking of linear velocity commands (xy axes)
         local_vel = brax_math.rotate(xd.vel[0], brax_math.quat_inv(x.rot[0]))
-        # lin_vel_error = jp.sum(jp.square(info["command"][:2] - local_vel[:2]))
-        lin_vel_error = jp.sum(jp.square(info["command"][:2] - xd.vel[0,:2]))
+        lin_vel_error = jp.sum(jp.square(info["command"][:2] - local_vel[:2]))
         lin_vel_reward = jp.exp(-self._linvel_scaling * lin_vel_error)
         info["bodypos_distance"] = lin_vel_error
         tracking_lin_vel = self._tracking_lin_vel_weight * lin_vel_reward
@@ -856,6 +879,7 @@ class FlyRunSim(PipelineEnv):
             self._tracking_ang_vel_weight
             * self._reward_tracking_ang_vel(info["command"], x, xd)
         )
+        
         ang_vel_xy = jp.clip(self._ang_vel_xy_weight * self._reward_ang_vel_xy(xd),self._ang_vel_xy_scaling,0)
         lin_vel_z = jp.clip(self._lin_vel_z_weight * self._reward_lin_vel_z(xd),self._lin_vel_z_scaling,0)
         orientation = self._orientation_weight * jp.exp(-self._orientation_scaling*self._reward_orientation(x))
@@ -873,7 +897,8 @@ class FlyRunSim(PipelineEnv):
         )
 
         reward = (
-            tracking_lin_vel
+            pos_reward
+            + tracking_lin_vel
             + tracking_ang_vel
             + ang_vel_xy
             + lin_vel_z
@@ -883,7 +908,7 @@ class FlyRunSim(PipelineEnv):
             + stand_still
             + foot_slip
             + termination
-        ) * self.dt
+        ) 
 
         # Handle nans during sim by resetting env
         reward = jp.nan_to_num(reward)
@@ -949,7 +974,8 @@ class FlyRunSim(PipelineEnv):
                 brax_math.rotate(
                     jp.array([0, 0, -1]), inv_torso_rot
                 ),  # projected gravity (3)
-                info["command"] * jp.array([2.0, 2.0, 0.25]),  # command (3)
+                info["command"],  # command (3)
+                data.q[7:] - self._default_pose, # motor angles
                 info["prev_ctrl"],  # last action (self.nu)
             ]
         )
@@ -966,9 +992,9 @@ class FlyRunSim(PipelineEnv):
         return reference_obs, proprioceptive_obs
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
-        lin_vel_x = [0.1, 0.2]  # min max [m/s]
-        lin_vel_y = [-0.02, 0.2]  # min max [m/s]
-        ang_vel_yaw = [-0.02, 0.2]  # min max [rad/s]
+        lin_vel_x = [-2.0, 2.0]  # min max [m/s]
+        lin_vel_y = [-2.0, 2.0]  # min max [m/s]
+        ang_vel_yaw = [-0.002, 0.02]  # min max [rad/s]
 
         _, key1,key2,key3 = jax.random.split(rng, 4)
         lin_vel_x = jax.random.uniform(
@@ -1034,7 +1060,7 @@ class FlyRunSim(PipelineEnv):
         )
 
     def _reward_termination(self, done: jax.Array, step: jax.Array) -> jax.Array:
-        return (done > 0.5) & (step < self._clip_length)
+        return (done < 0.5) & (step < self._clip_length)
 
     def _reward_foot_slip(
         self, pipeline_state: State, contact_filt: jax.Array

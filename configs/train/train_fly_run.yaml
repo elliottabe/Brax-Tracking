@@ -8,7 +8,7 @@ task_name: ${dataset.dname}
 note: 
 num_envs: 1024 
 num_timesteps: 10_000_000_000
-eval_every: 200_000_000
+eval_every: 100_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001
@@ -29,7 +29,7 @@ encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]
 restore_checkpoint: '${paths.ckpt_dir}/run_id=21594499/ckpt/21594499/018'
-freeze_encoder: True
+freeze_decoder: True
 state_metric_list: 
   - total_dist
   - tracking_lin_vel
@@ -44,3 +44,5 @@ state_metric_list:
   - termination
 info_metric_list: 
   - bodypos_distance
+  - summed_pos_distance
+  - joint_distance
