@@ -251,6 +251,10 @@ def train(
         preprocess_observations_fn=normalize,
     )
     make_policy = custom_ppo_networks.make_inference_fn(ppo_network)
+    init_params = ppo_losses.PPONetworkParams(
+        policy=ppo_network.policy_network.init(key_policy),
+        value=ppo_network.value_network.init(key_value),
+    )
 
     if freeze_mask_fn is not None:
         optimizer = optax.multi_transform(
@@ -418,10 +422,6 @@ def train(
             metrics,
         )  # pytype: disable=bad-return-type  # py311-upgrade
 
-    init_params = ppo_losses.PPONetworkParams(
-        policy=ppo_network.policy_network.init(key_policy),
-        value=ppo_network.value_network.init(key_value),
-    )
     training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
         optimizer_state=optimizer.init(
             init_params

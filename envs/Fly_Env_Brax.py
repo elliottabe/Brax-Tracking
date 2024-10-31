@@ -862,7 +862,7 @@ class FlyRunSim(PipelineEnv):
         done = jp.max(jp.array([nan, fall, too_far, bad_pose]))
 
         # foot contact data based on z-position
-        foot_pos = data.site_xpos[self._endeff_idxs]  # pytype: disable=attribute-error
+        foot_pos = data.site_xpos[self._endeff_idxs] 
         foot_contact_z = foot_pos[:, 2] - self._foot_radius
         contact = foot_contact_z < 1e-3  # a mm or less off the floor
         contact_filt_mm = contact | state.info["last_contact"]
