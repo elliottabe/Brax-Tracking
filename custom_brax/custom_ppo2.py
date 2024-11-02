@@ -28,25 +28,29 @@ from brax.training import acting
 from brax.training import gradients
 from brax.training import pmap
 from brax.training import types
+
+# from brax.training.acme import running_statistics
+import masked_running_statistics as running_statistics
+from masked_running_statistics import RunningStatisticsState
 from brax.training.acme import specs
+import orbax.checkpoint as ocp
+
+# from brax.training.agents.ppo import losses as ppo_losses
+import custom_losses as ppo_losses
+
+# from brax.training.agents.ppo import networks as ppo_networks
+import custom_ppo_networks
 from brax.training.types import Params
 from brax.training.types import PRNGKey
 from brax.v1 import envs as envs_v1
-
-##### import custom brax functions
-import custom_brax.masked_running_statistics as running_statistics
-from custom_brax.masked_running_statistics import RunningStatisticsState
-import custom_brax.custom_losses as ppo_losses
-from custom_brax import custom_ppo_networks
-from custom_brax import custom_wrappers
-
 import flax
 from flax.training import orbax_utils
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import orbax.checkpoint as ocp
+import orbax
+import custom_wrappers
 from etils import epath
 from pathlib import Path
 
@@ -299,7 +303,7 @@ def train(
         logging.info("restoring from checkpoint %s", checkpoint_path)
         # env_steps = int(epath.Path(checkpoint_path).stem)
         ckptr = ocp.CompositeCheckpointHandler()
-        tracking_task_obs_size = 935
+        tracking_task_obs_size = 470
         tracking_obs_size = (
             env_state.obs.shape[-1] - task_obs_size + tracking_task_obs_size
         )
@@ -330,50 +334,50 @@ def train(
         loaded_params = loaded_ckpt["params"]
         env_steps = loaded_ckpt["env_steps"]
 
-    # Only partially replace initial policy if freezing decoder
-    if freeze_mask_fn is not None:
-        init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
-            "decoder"
-        ]
-        running_statistics_mask = jnp.arange(env_state.obs.shape[-1]) < int(
-            task_obs_size
-        )
-        mean = training_state.normalizer_params.mean.at[task_obs_size:].set(
-            loaded_normalizer_params.mean[tracking_task_obs_size:]
-        )
-        std = training_state.normalizer_params.std.at[task_obs_size:].set(
-            loaded_normalizer_params.std[tracking_task_obs_size:]
-        )
-        summed_variance = training_state.normalizer_params.summed_variance.at[
-            task_obs_size:
-        ].set(loaded_normalizer_params.summed_variance[tracking_task_obs_size:])
-        normalizer_params = RunningStatisticsState(
-            count=jnp.zeros(()), mean=mean, summed_variance=summed_variance, std=std
-        )
-        print(running_statistics_mask)
-        assert (
-            running_statistics_mask.shape
-            == training_state.normalizer_params.mean.shape
-        )
-    else:
-        init_params = init_params.replace(policy=loaded_params.policy)
-        running_statistics_mask = None
+        # Only partially replace initial policy if freezing decoder
+        if freeze_mask_fn is not None:
+            init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
+                "decoder"
+            ]
+            running_statistics_mask = jnp.arange(env_state.obs.shape[-1]) < int(
+                task_obs_size
+            )
+            mean = training_state.normalizer_params.mean.at[task_obs_size:].set(
+                loaded_normalizer_params.mean[tracking_task_obs_size:]
+            )
+            std = training_state.normalizer_params.std.at[task_obs_size:].set(
+                loaded_normalizer_params.std[tracking_task_obs_size:]
+            )
+            summed_variance = training_state.normalizer_params.summed_variance.at[
+                task_obs_size:
+            ].set(loaded_normalizer_params.summed_variance[tracking_task_obs_size:])
+            normalizer_params = RunningStatisticsState(
+                count=jnp.zeros(()), mean=mean, summed_variance=summed_variance, std=std
+            )
+            print(running_statistics_mask)
+            assert (
+                running_statistics_mask.shape
+                == training_state.normalizer_params.mean.shape
+            )
+        else:
+            init_params = init_params.replace(policy=loaded_params.policy)
+            running_statistics_mask = None
 
-    if continue_training:
-        init_params = init_params.replace(value=loaded_params.value)
-    else:
-        env_steps = 0
+        if continue_training:
+            init_params = init_params.replace(value=loaded_params.value)
+        else:
+            env_steps = 0
 
-    training_state = (
-        TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
-            optimizer_state=optimizer.init(
-                init_params
-            ),  # pytype: disable=wrong-arg-types  # numpy-scalars
-            params=init_params,
-            normalizer_params=normalizer_params,
-            env_steps=env_steps,
+        training_state = (
+            TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
+                optimizer_state=optimizer.init(
+                    init_params
+                ),  # pytype: disable=wrong-arg-types  # numpy-scalars
+                params=init_params,
+                normalizer_params=normalizer_params,
+                env_steps=env_steps,
+            )
         )
-    )
 
     loss_fn = functools.partial(
         ppo_losses.compute_ppo_loss,
@@ -626,7 +630,7 @@ def train(
     # If there was no mistakes the training_state should still be identical on all
     # devices.
     pmap.assert_is_replicated(training_state)
-    params = _unpmap((training_state.normalizer_params, training_state.params))
+    params = _unpmap((training_state.normalizer_params, training_state.params.policy))
     logging.info("total steps: %s", total_steps)
     pmap.synchronize_hosts()
     return (make_policy, params, metrics)

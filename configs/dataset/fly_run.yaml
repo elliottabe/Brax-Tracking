@@ -38,7 +38,7 @@ env_args:
   foot_slip_scaling: -1.0
   healthy_z_range: [-0.03, 0.1]
   reset_noise_scale: 1e-3
-  ref_len: 5
+  ref_len: 15
   free_jnt: True
   inference_mode: False
   end_eff_names:

@@ -229,7 +229,7 @@ class FlyTracking(PipelineEnv):
         reference_obs, proprioceptive_obs = self._get_obs(data, info)
 
         # Used to intialize our intention network
-        info["reference_obs_size"] = reference_obs.shape[-1]
+        info["task_obs_size"] = reference_obs.shape[-1]
 
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
 
@@ -623,7 +623,7 @@ class FlyRunSim(PipelineEnv):
         solver="cg",
         iterations: int = 6,
         ls_iterations: int = 6,
-        ref_len=5,
+        ref_len=15,
         free_jnt=True,
         inference_mode=False,
         torque_actuators=True,
@@ -787,7 +787,7 @@ class FlyRunSim(PipelineEnv):
         reference_obs, proprioceptive_obs = self._get_obs(data, info, obs_history)
 
         # Used to intialize our intention network
-        info["reference_obs_size"] = reference_obs.shape[-1]
+        info["task_obs_size"] = reference_obs.shape[-1]
 
         obs = jp.concatenate([reference_obs, proprioceptive_obs])
 
@@ -992,22 +992,23 @@ class FlyRunSim(PipelineEnv):
         return reference_obs, proprioceptive_obs
 
     def sample_command(self, rng: jax.Array) -> jax.Array:
-        lin_vel_x = [-2.0, 2.0]  # min max [m/s]
-        lin_vel_y = [-2.0, 2.0]  # min max [m/s]
-        ang_vel_yaw = [-0.002, 0.02]  # min max [rad/s]
+        lin_vel_x = [-2.0, 2.0]  # min max [cm/s]
+        lin_vel_y = [-0.1, 0.1]  # min max [cm/s]
+        ang_vel_yaw = [-0.7, 0.7]  # min max [rad/s]
 
         _, key1,key2,key3 = jax.random.split(rng, 4)
         lin_vel_x = jax.random.uniform(
             key1, (1,), minval=lin_vel_x[0], maxval=lin_vel_x[1]
         )
-        # lin_vel_y = jax.random.uniform(
-        #     key2, (1,), minval=lin_vel_y[0], maxval=lin_vel_y[1]
-        # )
-        # ang_vel_yaw = jax.random.uniform(
-        #     key3, (1,), minval=ang_vel_yaw[0], maxval=ang_vel_yaw[1]
-        # )
-
-        return jp.array([lin_vel_x[0],0,0])
+        lin_vel_y = jax.random.uniform(
+            key2, (1,), minval=lin_vel_y[0], maxval=lin_vel_y[1]
+        )
+        ang_vel_yaw = jax.random.uniform(
+            key3, (1,), minval=ang_vel_yaw[0], maxval=ang_vel_yaw[1]
+        )
+        new_cmd = jp.array([lin_vel_x[0], lin_vel_y[0], ang_vel_yaw[0]])
+        # return jp.array([lin_vel_x[0],0,0])
+        return new_cmd
 
     # ------------ reward functions----------------
     def _reward_lin_vel_z(self, xd: Motion) -> jax.Array:

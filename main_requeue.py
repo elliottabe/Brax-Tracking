@@ -1,4 +1,5 @@
 import os
+import subprocess as sp
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 os.environ['MUJOCO_GL'] = 'egl'
@@ -59,18 +60,46 @@ def signal_handler(signum, frame):
     global interrupted
     interrupted = True
 
+def get_gpu_memory():
+    """Get total GPU memory with nvidia-smi
+
+    Returns:
+        list: total memory in MB for each GPU
+    """
+    command = "nvidia-smi --query-gpu=memory.total --format=csv"
+    memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
+    return [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
+
+def closest_power_of_two(x):
+    # Start with the largest power of 2 less than or equal to x
+    power = 1
+    while power * 2 <= x:
+        power *= 2
+    return power
+
+
 # Register the signal handler
 signal.signal(signal.SIGTERM, signal_handler)
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    assert n_gpus == cfg.num_gpus, 'Number of GPUs missmatched'
+    ##### Scale number of envs based on total memory per gpu #####
+    tot_mem = get_gpu_memory()[0]
+    num_envs = int(closest_power_of_two(tot_mem/22.8))
+    cfg.train.num_envs = cfg.num_gpus*num_envs
+    if n_gpus != cfg.num_gpus:
+        cfg.num_gpus = n_gpus
+        cfg.train.num_envs = n_gpus*num_envs
+    print(f'GPUs:{n_gpus}, tot_mem:{tot_mem}Mb, num_envs:{num_envs}, total_envs:{cfg.train.num_envs}')
+    
     print('run_id:', cfg.run_id)
     if ('load_jobid' in cfg) and (cfg['load_jobid'] is not None) and (cfg['load_jobid'] !=''):
         run_id = cfg.load_jobid
         load_cfg_path = Path(cfg.paths.base_dir) / f'run_id={run_id}/logs/run_config.yaml'
         cfg = OmegaConf.load(load_cfg_path)
+        continue_training = True
     else:
         run_id = cfg.run_id
+        continue_training = False
     # Create paths if they don't exist and Path objects
     for k in cfg.paths.keys():
         if k != "user":
@@ -117,6 +146,7 @@ def main(cfg: DictConfig) -> None:
             # Otherwise bootstrap (start from scratch)
             print('Model path does not exist. Starting from scratch.')
             restore_checkpoint = None
+            
     if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
         network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
     else: 
@@ -133,7 +163,12 @@ def main(cfg: DictConfig) -> None:
         episode_length = (env_args.clip_length - 50 - env_args.ref_len) * env._steps_for_cur_frame
         print(f"episode_length {episode_length}")
 
-
+        options = ocp.CheckpointManagerOptions(save_interval_steps=2)
+        ckpt_mgr = ocp.CheckpointManager(
+            cfg.paths.ckpt_dir,
+            item_names=("normalizer_params", "params", "env_steps"),
+            options=options,
+        )
         train_fn = functools.partial(
             ppo.train,
             num_envs=cfg.train["num_envs"],
@@ -160,8 +195,17 @@ def main(cfg: DictConfig) -> None:
                 decoder_hidden_layer_sizes=cfg.train['decoder_hidden_layer_sizes'],
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
             ),
-            restore_checkpoint_path=restore_checkpoint,
+            checkpoint_network_factory=functools.partial(
+                    custom_ppo_networks.make_intention_ppo_networks,
+                    intention_latent_size=60,
+                    encoder_hidden_layer_sizes=(512, 512),
+                    decoder_hidden_layer_sizes=(512, 512),
+                    value_hidden_layer_sizes=(512, 512),
+                ),
+            checkpoint_path=restore_checkpoint,
             freeze_mask_fn=None if (cfg.train['freeze_decoder'] == False) else masks.create_decoder_mask,
+            continue_training=continue_training,
+            custom_wrap=True,  # custom wrappers to handle infos
         )
 
 
@@ -221,8 +265,13 @@ def main(cfg: DictConfig) -> None:
         if not (cfg.paths.log_dir / "run_config.yaml").exists():
             OmegaConf.save(cfg, cfg.paths.log_dir / "run_config.yaml")
         print(OmegaConf.to_yaml(cfg))
+        
+        
         make_inference_fn, params, _ = train_fn(
-            environment=env, progress_fn=wandb_progress, policy_params_fn=policy_params_fn
+            environment=env, 
+            progress_fn=wandb_progress, 
+            policy_params_fn=policy_params_fn,
+            checkpoint_manager=ckpt_mgr,
         )
 
         final_save_path = Path(f"{model_path}")/f'brax_ppo_{cfg.dataset.name}_run_finished'

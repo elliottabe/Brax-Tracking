@@ -112,6 +112,7 @@ def compute_ppo_loss(
     gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
+    kl_loss: bool = False,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
@@ -190,17 +191,20 @@ def compute_ppo_loss(
     )
     entropy_loss = entropy_cost * -entropy
 
-    if 'latent_mean' in extras.keys():
-      latent_mean = extras['latent_mean']
-      latent_logvar = extras['latent_logvar']
-      # KL Divergence for latent layer
-      kl_latent_loss = kl_weight * (
-          -0.5
-          * jnp.mean(1 + latent_logvar - jnp.square(latent_mean) - jnp.exp(latent_logvar))
-      )
-    elif 'z' in extras.keys():
-      z = extras['z']
-      kl_latent_loss = 0
+    # KL Divergence for latent layer
+    if kl_loss:
+        # Make sure your network extras have these values
+        latent_mean = extras["latent_mean"]
+        latent_logvar = extras["latent_logvar"]
+
+        kl_latent_loss = kl_weight * (
+            -0.5
+            * jnp.mean(
+                1 + latent_logvar - jnp.square(latent_mean) - jnp.exp(latent_logvar)
+            )
+        )
+    else:
+        kl_latent_loss = 0
 
     total_loss = policy_loss + v_loss + entropy_loss + kl_latent_loss
     return total_loss, {

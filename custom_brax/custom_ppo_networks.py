@@ -74,7 +74,7 @@ def make_inference_fn(ppo_networks: PPOImitationNetworks):
 # intention policy
 def make_intention_ppo_networks(
     observation_size: int,
-    reference_obs_size: int,
+    task_obs_size: int,
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     intention_latent_size: int = 60,
@@ -90,7 +90,7 @@ def make_intention_ppo_networks(
         parametric_action_distribution.param_size,
         latent_size=intention_latent_size,
         total_obs_size=observation_size,
-        reference_obs_size=reference_obs_size,
+        task_obs_size=task_obs_size,
         preprocess_observations_fn=preprocess_observations_fn,
         encoder_hidden_layer_sizes=encoder_hidden_layer_sizes,
         decoder_hidden_layer_sizes=decoder_hidden_layer_sizes,
@@ -110,7 +110,7 @@ def make_intention_ppo_networks(
 
 def make_encoderdecoder_ppo_networks(
     observation_size: int,
-    reference_obs_size: int,
+    task_obs_size: int,
     action_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     intention_latent_size: int = 60,
@@ -126,7 +126,7 @@ def make_encoderdecoder_ppo_networks(
         parametric_action_distribution.param_size,
         latent_size=intention_latent_size,
         total_obs_size=observation_size,
-        reference_obs_size=reference_obs_size,
+        task_obs_size=task_obs_size,
         preprocess_observations_fn=preprocess_observations_fn,
         encoder_hidden_layer_sizes=encoder_hidden_layer_sizes,
         decoder_hidden_layer_sizes=decoder_hidden_layer_sizes,
