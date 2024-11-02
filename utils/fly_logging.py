@@ -82,9 +82,9 @@ def log_eval_rollout(cfg, rollout, state, env, reference_clip, model_path, num_s
     )
     
     if 'pair' in cfg.dataset.rendering_mjcf:
-        render_pair_video(qposes_rollout,qposes_ref,cfg,env,model_path,num_steps)
+        render_pair_video(qposes_rollout,qposes_ref,cfg,env,cfg.paths.fig_dir,num_steps)
     else: 
-        render_single_vid(qposes_rollout,cfg,env,model_path,num_steps)
+        render_single_vid(qposes_rollout,cfg,env,cfg.paths.fig_dir,num_steps)
 
 ##### Rendering with pair xml #####
 def render_pair_video(qposes_rollout,qposes_ref, cfg,env,model_path,num_steps): 

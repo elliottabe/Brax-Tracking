@@ -28,6 +28,10 @@ network_type: intention
 encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]
+ckpt_net:
+  encoder_hidden_layer_sizes: [256, 256]
+  decoder_hidden_layer_sizes: [256, 256]
+  value_hidden_layer_sizes: [256, 256]
 restore_checkpoint: ''
 freeze_decoder: False
 state_metric_list: 

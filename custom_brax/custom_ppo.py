@@ -300,7 +300,7 @@ def train(
         logging.info("restoring from checkpoint %s", checkpoint_path)
         # env_steps = int(epath.Path(checkpoint_path).stem)
         ckptr = ocp.CompositeCheckpointHandler()
-        tracking_task_obs_size = 953
+        tracking_task_obs_size = 935
         tracking_obs_size = (
             env_state.obs.shape[-1] - task_obs_size + tracking_task_obs_size
         )
@@ -357,7 +357,9 @@ def train(
             running_statistics_mask = None
 
         if continue_training:
+            print('continuing training')
             init_params = init_params.replace(value=loaded_params.value)
+            normalizer_params=loaded_normalizer_params
         else:
             env_steps = 0
 

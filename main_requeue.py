@@ -84,7 +84,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 def main(cfg: DictConfig) -> None:
     ##### Scale number of envs based on total memory per gpu #####
     tot_mem = get_gpu_memory()[0]
-    num_envs = int(closest_power_of_two(tot_mem/22.8))
+    num_envs = int(closest_power_of_two(tot_mem/21.4))
     cfg.train.num_envs = cfg.num_gpus*num_envs
     if n_gpus != cfg.num_gpus:
         cfg.num_gpus = n_gpus
@@ -126,20 +126,24 @@ def main(cfg: DictConfig) -> None:
         try: #
             # Try to recover a state file with the relevant variables stored
             # from previous stop if any
-            model_path = cfg.paths.ckpt_dir / f"./{run_id}"
-            if model_path.exists():
+            model_path = cfg.paths.ckpt_dir
+            if any(model_path.iterdir()):
+                from natsort import natsorted
                 ##### Get all the checkpoint files #####
-                ckpt_files = sorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()])
+                ckpt_files = natsorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()])
                 ##### Get the latest checkpoint #####
                 max_ckpt = ckpt_files[-1]
                 EVAL_STEPS = int(max_ckpt.stem)
-                restore_checkpoint = max_ckpt.as_posix()
-                cfg = OmegaConf.load(cfg.paths.log_dir / "run_config.yaml")
-                cfg.dataset = cfg.dataset
-                cfg.dataset.env_args = cfg.dataset.env_args
-                env_cfg = cfg.dataset
-                env_args = cfg.dataset.env_args
-                print(f'Loading: {max_ckpt}')
+                if EVAL_STEPS > 0 :
+                    restore_checkpoint = max_ckpt
+                    cfg = OmegaConf.load(cfg.paths.log_dir / "run_config.yaml")
+                    cfg.dataset = cfg.dataset
+                    cfg.dataset.env_args = cfg.dataset.env_args
+                    env_cfg = cfg.dataset
+                    env_args = cfg.dataset.env_args
+                    print(f'Loading: {max_ckpt}')
+                else:
+                    raise ValueError('Model path does not exist. Starting from scratch.')
             else:
                 raise ValueError('Model path does not exist. Starting from scratch.')
         except (ValueError):
@@ -163,7 +167,7 @@ def main(cfg: DictConfig) -> None:
         episode_length = (env_args.clip_length - 50 - env_args.ref_len) * env._steps_for_cur_frame
         print(f"episode_length {episode_length}")
 
-        options = ocp.CheckpointManagerOptions(save_interval_steps=2)
+        options = ocp.CheckpointManagerOptions(save_interval_steps=1)
         ckpt_mgr = ocp.CheckpointManager(
             cfg.paths.ckpt_dir,
             item_names=("normalizer_params", "params", "env_steps"),
@@ -198,9 +202,9 @@ def main(cfg: DictConfig) -> None:
             checkpoint_network_factory=functools.partial(
                     custom_ppo_networks.make_intention_ppo_networks,
                     intention_latent_size=60,
-                    encoder_hidden_layer_sizes=(512, 512),
-                    decoder_hidden_layer_sizes=(512, 512),
-                    value_hidden_layer_sizes=(512, 512),
+                    encoder_hidden_layer_sizes=cfg.train.ckpt_net['encoder_hidden_layer_sizes'],
+                    decoder_hidden_layer_sizes=cfg.train.ckpt_net['decoder_hidden_layer_sizes'],
+                    value_hidden_layer_sizes=cfg.train.ckpt_net['value_hidden_layer_sizes'],
                 ),
             checkpoint_path=restore_checkpoint,
             freeze_mask_fn=None if (cfg.train['freeze_decoder'] == False) else masks.create_decoder_mask,
@@ -238,11 +242,11 @@ def main(cfg: DictConfig) -> None:
             global EVAL_STEPS
             EVAL_STEPS = EVAL_STEPS + 1
             print(f'Eval Step: {EVAL_STEPS}, num_steps: {num_steps}')
-            ckptr = ocp.Checkpointer(ocp.PyTreeCheckpointHandler())
-            save_args = orbax_utils.save_args_from_target(params)
-            path = model_path / f'{EVAL_STEPS:03d}'
-            os.makedirs(path, exist_ok=True)
-            ckptr.save(path, params, force=True, save_args=save_args)
+            # ckptr = ocp.Checkpointer(ocp.PyTreeCheckpointHandler())
+            # save_args = orbax_utils.save_args_from_target(params)
+            # path = model_path / f'{EVAL_STEPS:03d}'
+            # os.makedirs(path, exist_ok=True)
+            # ckptr.save(path, params, force=True, save_args=save_args)
             policy_params = (params[0],params[1].policy)
             Env_steps = params[2]
             jit_inference_fn = jax.jit(make_policy(policy_params, deterministic=True))
@@ -260,7 +264,7 @@ def main(cfg: DictConfig) -> None:
                 state = jit_step(state, ctrl)
                 rollout.append(state)
             ##### Log the rollout to wandb #####
-            log_eval_rollout(cfg,rollout,state,env,reference_clip,model_path,num_steps)
+            log_eval_rollout(cfg,rollout,state,env,reference_clip,model_path,EVAL_STEPS)
 
         if not (cfg.paths.log_dir / "run_config.yaml").exists():
             OmegaConf.save(cfg, cfg.paths.log_dir / "run_config.yaml")
