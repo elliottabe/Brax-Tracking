@@ -265,6 +265,7 @@ def train(
 
     make_policy = custom_ppo_networks.make_inference_fn(ppo_network)
 
+
     init_params = ppo_losses.PPONetworkParams(
         policy=ppo_network.policy_network.init(key_policy),
         value=ppo_network.value_network.init(key_value),
@@ -299,7 +300,7 @@ def train(
         logging.info("restoring from checkpoint %s", checkpoint_path)
         # env_steps = int(epath.Path(checkpoint_path).stem)
         ckptr = ocp.CompositeCheckpointHandler()
-        tracking_task_obs_size = 935
+        tracking_task_obs_size = 953
         tracking_obs_size = (
             env_state.obs.shape[-1] - task_obs_size + tracking_task_obs_size
         )
@@ -322,58 +323,56 @@ def train(
             params=ocp.args.StandardRestore(checkpoint_init_params),
             env_steps=ocp.args.ArrayRestore(0),
         )
-        loaded_ckpt = ckptr.restore(
-            checkpoint_path.resolve(),
-            args=target,
-        )
+        loaded_ckpt = ckptr.restore(checkpoint_path.resolve(), args=target)
         loaded_normalizer_params = loaded_ckpt["normalizer_params"]
         loaded_params = loaded_ckpt["params"]
         env_steps = loaded_ckpt["env_steps"]
 
-    # Only partially replace initial policy if freezing decoder
-    if freeze_mask_fn is not None:
-        init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
-            "decoder"
-        ]
-        running_statistics_mask = jnp.arange(env_state.obs.shape[-1]) < int(
-            task_obs_size
-        )
-        mean = training_state.normalizer_params.mean.at[task_obs_size:].set(
-            loaded_normalizer_params.mean[tracking_task_obs_size:]
-        )
-        std = training_state.normalizer_params.std.at[task_obs_size:].set(
-            loaded_normalizer_params.std[tracking_task_obs_size:]
-        )
-        summed_variance = training_state.normalizer_params.summed_variance.at[
-            task_obs_size:
-        ].set(loaded_normalizer_params.summed_variance[tracking_task_obs_size:])
-        normalizer_params = RunningStatisticsState(
-            count=jnp.zeros(()), mean=mean, summed_variance=summed_variance, std=std
-        )
-        print(running_statistics_mask)
-        assert (
-            running_statistics_mask.shape
-            == training_state.normalizer_params.mean.shape
+        # Only partially replace initial policy if freezing decoder
+        if freeze_mask_fn is not None:
+            init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
+                "decoder"
+            ]
+            running_statistics_mask = jnp.arange(env_state.obs.shape[-1]) < int(
+                task_obs_size
+            )
+            mean = training_state.normalizer_params.mean.at[task_obs_size:].set(
+                loaded_normalizer_params.mean[tracking_task_obs_size:]
+            )
+            std = training_state.normalizer_params.std.at[task_obs_size:].set(
+                loaded_normalizer_params.std[tracking_task_obs_size:]
+            )
+            summed_variance = training_state.normalizer_params.summed_variance.at[
+                task_obs_size:
+            ].set(loaded_normalizer_params.summed_variance[tracking_task_obs_size:])
+            normalizer_params = RunningStatisticsState(
+                count=jnp.zeros(()), mean=mean, summed_variance=summed_variance, std=std
+            )
+            assert (
+                running_statistics_mask.shape
+                == training_state.normalizer_params.mean.shape
+            )
+        else:
+            init_params = init_params.replace(policy=loaded_params.policy)
+            running_statistics_mask = None
+
+        if continue_training:
+            init_params = init_params.replace(value=loaded_params.value)
+        else:
+            env_steps = 0
+
+        training_state = (
+            TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
+                optimizer_state=optimizer.init(
+                    init_params
+                ),  # pytype: disable=wrong-arg-types  # numpy-scalars
+                params=init_params,
+                normalizer_params=normalizer_params,
+                env_steps=env_steps,
+            )
         )
     else:
-        init_params = init_params.replace(policy=loaded_params.policy)
         running_statistics_mask = None
-
-    if continue_training:
-        init_params = init_params.replace(value=loaded_params.value)
-    else:
-        env_steps = 0
-
-    training_state = (
-        TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
-            optimizer_state=optimizer.init(
-                init_params
-            ),  # pytype: disable=wrong-arg-types  # numpy-scalars
-            params=init_params,
-            normalizer_params=normalizer_params,
-            env_steps=env_steps,
-        )
-    )
 
     loss_fn = functools.partial(
         ppo_losses.compute_ppo_loss,
