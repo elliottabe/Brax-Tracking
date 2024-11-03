@@ -141,6 +141,7 @@ def main(cfg: DictConfig) -> None:
                     cfg.dataset.env_args = cfg.dataset.env_args
                     env_cfg = cfg.dataset
                     env_args = cfg.dataset.env_args
+                    continue_training = True
                     print(f'Loading: {max_ckpt}')
                 else:
                     raise ValueError('Model path does not exist. Starting from scratch.')
