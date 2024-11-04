@@ -9,22 +9,36 @@ env_args:
   mjcf_path: "${paths.cwd_dir}/assets/fruitfly/fruitfly_force_fast.xml" 
   physics_timestep: 2e-4
   solver: cg
-  iterations: 6
-  ls_iterations: 6
+  iterations: 8
+  ls_iterations: 8
   torque_actuators: True
   physics_steps_per_control_step: 10
-  tracking_lin_vel_weight: 5.5
-  tracking_ang_vel_weight:  1
-  lin_vel_z_weight: -2.0
-  ang_vel_xy_weight: -0.05
-  orientation_weight: -5.0
-  torques_weight: -0.0002
-  action_rate_weight: -0.01
-  stand_still_weight: -0.5
-  termination_weight: -1.0
+  too_far_dist: 0.01
+  bad_pose_dist: 10.0
+  pos_reward_weight: 1.0 
+  tracking_lin_vel_weight: 0.0
+  tracking_ang_vel_weight: 0.0
+  lin_vel_z_weight: 0.0
+  ang_vel_xy_weight: 0.0
+  orientation_weight: 1.0
+  torques_weight: 0.0
+  action_rate_weight: 0.0
+  stand_still_weight: 0.0
+  foot_slip_weight: 0.0
+  termination_weight: 1.0
+  pos_scaling: 200.0
+  linvel_scaling: 400.0
+  angvel_scaling: 4.0
+  ang_vel_xy_scaling: -1.0
+  lin_vel_z_scaling: -1.0
+  orientation_scaling: 5.0
+  torques_scaling: -1.0
+  action_rate_scaling: -1.0
+  stand_still_scaling: -1.0
+  foot_slip_scaling: -1.0
   healthy_z_range: [-0.03, 0.1]
   reset_noise_scale: 1e-3
-  ref_len: 5
+  ref_len: 15
   free_jnt: True
   inference_mode: False
   end_eff_names:
@@ -119,4 +133,11 @@ env_args:
     - femur_twist_T3_right
     - femur_T3_right
     - tibia_T3_right
+    - tarsus_T3_right
+  lower_leg_names:
+    - tarsus_T1_left
+    - tarsus_T1_right
+    - tarsus_T2_left
+    - tarsus_T2_right
+    - tarsus_T3_left
     - tarsus_T3_right

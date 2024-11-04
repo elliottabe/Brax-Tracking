@@ -10,8 +10,8 @@ env_args:
   mjcf_path: "${paths.cwd_dir}/assets/fruitfly/fruitfly_force_fast.xml" 
   physics_timestep: 2e-4
   solver: cg
-  iterations: 12
-  ls_iterations: 12
+  iterations: 8
+  ls_iterations: 8
   torque_actuators: True
   physics_steps_per_control_step: 10
   too_far_dist: 0.01
