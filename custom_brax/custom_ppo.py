@@ -355,6 +355,7 @@ def train(
         else:
             init_params = init_params.replace(policy=loaded_params.policy)
             running_statistics_mask = None
+            normalizer_params=loaded_normalizer_params
 
         if continue_training:
             print('continuing training')
@@ -376,6 +377,13 @@ def train(
     else:
         running_statistics_mask = None
 
+    if num_timesteps == 0:
+        return (
+            make_policy,
+            (training_state.normalizer_params, training_state.params, training_state.env_steps),
+            {},
+        )
+    
     loss_fn = functools.partial(
         ppo_losses.compute_ppo_loss,
         ppo_network=ppo_network,
