@@ -15,7 +15,7 @@ def slurm_submit(script):
         print(f"Error submitting job: {e.output}", file=sys.stderr)
         sys.exit(1)
 
-def submit(num_gpus, partition, job_name, mem, cpus, time, note, train, dataset, num_envs, load_jobid, gpu_type):
+def submit(num_gpus, partition, job_name, mem, cpus, time, note, train, dataset, num_envs, load_jobid, gpu_type,override):
     """
     Construct and submit the SLURM script with the specified parameters.
     """
@@ -53,7 +53,7 @@ set -x
 source ~/.bashrc
 nvidia-smi
 conda activate stac-mjx-env
-python -u main_requeue.py paths=hyak train.note={note} version=ckpt train={train} dataset={dataset} num_gpus={num_gpus} load_jobid={load_jobid} run_id=$SLURM_JOB_ID 
+python -u main_requeue.py paths=hyak train.note={note} version=ckpt train={train} dataset={dataset} num_gpus={num_gpus} load_jobid={load_jobid} run_id=$SLURM_JOB_ID {override}
             """
     print(f"Submitting job")
     print(script)
@@ -87,6 +87,8 @@ def main():
                         help='Number of environments to run (default: 2048)')
     parser.add_argument('--load_jobid', type=str, default='',
                         help='JobID to resume training (default: '')')
+    parser.add_argument('--override', type=str, default='',
+                        help='JobID to resume training (default: '')')
 
     args = parser.parse_args()
 
@@ -103,6 +105,7 @@ def main():
         num_envs=args.num_envs,
         load_jobid=args.load_jobid,
         gpu_type=args.gpu_type,
+        override=args.override,
     )
 
 if __name__ == "__main__":
