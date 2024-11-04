@@ -5,8 +5,8 @@ dataset_name: ${dataset.name}
 # if set to positive integer, overrides the default
 version: ''
 seed: 42
-num_gpus: ''
-run_id: ''
+num_gpus: 1
+run_id: 10
 load_jobid: ''
 
 # train: train_${dataset.dname}
@@ -14,9 +14,9 @@ load_jobid: ''
 # set default task and default training config based on dataset
 defaults:
   - _self_
-  - dataset: fly_freejnt
-  - train: train_fly_freejnt
-  - paths: hyak
+  - dataset: fly_multiclip
+  - train: train_fly_multiclip
+  - paths: glados
   # - override hydra/launcher: joblib
   # - hydra/job_logging: disabled
 # - train: ${dataset}
@@ -45,3 +45,5 @@ hydra:
   sweep:
     dir: ${paths.base_dir}
     subdir: ${hydra.job.override_dirname}
+  runtime:
+    output_dir: ${paths.base_dir}/${hydra:job.override_dirname}

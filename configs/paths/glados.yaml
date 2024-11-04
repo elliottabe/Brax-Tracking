@@ -1,0 +1,10 @@
+user: hg84
+
+# set the directory where the output files get saved
+cwd_dir:  /home/${paths.user}/Documents/Github/Brax-Tracking/
+base_dir: /data/users/${paths.user}/biomech_model/${dataset.name}/RL_${dataset.name}/${train.version}
+save_dir: ${paths.base_dir}/${hydra:job.override_dirname}
+log_dir:  ${paths.save_dir}/logs/
+ckpt_dir: ${paths.save_dir}/ckpt/
+fig_dir:  ${paths.save_dir}/figures/
+data_dir: /data/users/${paths.user}/biomech_model/${dataset.name}/datasets/Tuthill_data/

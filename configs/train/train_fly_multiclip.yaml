@@ -1,14 +1,14 @@
 name: train_fly_multiclip
 version: ${resolve_default:debug,${..version}}
 gpu: ${resolve_default:0,${..gpu}}
-wandb_project: "eabe_debug"
+wandb_project: "hg_debug"
 env_name: fly_freejnt_multiclip
 algo_name: ppo
 task_name: ${dataset.dname}
 note: 
-num_envs: 1024 
+num_envs: 2048
 num_timesteps: 10_000_000_000
-eval_every: 200_000_000
+eval_every: 10_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001
@@ -27,7 +27,7 @@ seed: 0
 encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]
-restore_checkpoint: ''
+restore_checkpoint: False
 freeze_encoder: False
 state_metric_list: 
   - pos_reward
