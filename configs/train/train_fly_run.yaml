@@ -8,7 +8,7 @@ task_name: ${dataset.dname}
 note: 
 num_envs: 1024 
 num_timesteps: 10_000_000_000
-eval_every: 200_000_000
+eval_every: 100_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001
@@ -21,22 +21,33 @@ num_updates_per_batch: 8
 discounting: 0.95
 learning_rate: 1e-4
 kl_weight: 1e-3
+kl_loss: False
 entropy_cost: 1e-2
 batch_size: ${train.num_envs}
 seed: 0
+network_type: encoderdecoder
 encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]
-restore_checkpoint: '${paths.ckpt_dir}/run_id=21402781/ckpt/21402781/052'
-freeze_encoder: True
+ckpt_net:
+  encoder_hidden_layer_sizes: [256, 256]
+  decoder_hidden_layer_sizes: [256, 256]
+  value_hidden_layer_sizes: [256, 256]
+restore_checkpoint: '${paths.ckpt_dir}/run_id=21751503/ckpt/21751503/010'
+freeze_decoder: True
 state_metric_list: 
   - total_dist
   - tracking_lin_vel
+  - tracking_ang_vel
   - ang_vel_xy
   - lin_vel_z
   - orientation
   - torques
   - action_rate
   - stand_still
+  - foot_slip
   - termination
-info_metric_list: []
+info_metric_list: 
+  - bodypos_distance
+  - summed_pos_distance
+  - joint_distance

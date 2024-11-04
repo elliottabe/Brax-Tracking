@@ -112,6 +112,7 @@ def compute_ppo_loss(
     gae_lambda: float = 0.95,
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
+    kl_loss: bool = False,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 
@@ -141,7 +142,7 @@ def compute_ppo_loss(
 
     # Put the time dimension first.
     data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
-    policy_logits, latent_mean, latent_logvar = policy_apply(
+    policy_logits, extras = policy_apply(
         normalizer_params, params.policy, data.observation, policy_key
     )
 
@@ -191,10 +192,19 @@ def compute_ppo_loss(
     entropy_loss = entropy_cost * -entropy
 
     # KL Divergence for latent layer
-    kl_latent_loss = kl_weight * (
-        -0.5
-        * jnp.mean(1 + latent_logvar - jnp.square(latent_mean) - jnp.exp(latent_logvar))
-    )
+    if kl_loss:
+        # Make sure your network extras have these values
+        latent_mean = extras["latent_mean"]
+        latent_logvar = extras["latent_logvar"]
+
+        kl_latent_loss = kl_weight * (
+            -0.5
+            * jnp.mean(
+                1 + latent_logvar - jnp.square(latent_mean) - jnp.exp(latent_logvar)
+            )
+        )
+    else:
+        kl_latent_loss = 0
 
     total_loss = policy_loss + v_loss + entropy_loss + kl_latent_loss
     return total_loss, {

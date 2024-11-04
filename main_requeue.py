@@ -1,4 +1,5 @@
 import os
+import subprocess as sp
 
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 os.environ['MUJOCO_GL'] = 'egl'
@@ -23,6 +24,7 @@ from brax.training.agents.ppo import networks as ppo_networks
 from custom_brax import custom_ppo as ppo
 from custom_brax import custom_wrappers
 from custom_brax import custom_ppo_networks
+from custom_brax import network_masks as masks
 from orbax import checkpoint as ocp
 from flax.training import orbax_utils
 # from envs.rodent import RodentSingleClip
@@ -58,18 +60,46 @@ def signal_handler(signum, frame):
     global interrupted
     interrupted = True
 
+def get_gpu_memory():
+    """Get total GPU memory with nvidia-smi
+
+    Returns:
+        list: total memory in MB for each GPU
+    """
+    command = "nvidia-smi --query-gpu=memory.total --format=csv"
+    memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
+    return [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
+
+def closest_power_of_two(x):
+    # Start with the largest power of 2 less than or equal to x
+    power = 1
+    while power * 2 <= x:
+        power *= 2
+    return power
+
+
 # Register the signal handler
 signal.signal(signal.SIGTERM, signal_handler)
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    assert n_gpus == cfg.num_gpus, 'Number of GPUs missmatched'
+    ##### Scale number of envs based on total memory per gpu #####
+    tot_mem = get_gpu_memory()[0]
+    num_envs = int(closest_power_of_two(tot_mem/21.4))
+    cfg.train.num_envs = cfg.num_gpus*num_envs
+    if n_gpus != cfg.num_gpus:
+        cfg.num_gpus = n_gpus
+        cfg.train.num_envs = n_gpus*num_envs
+    print(f'GPUs:{n_gpus}, tot_mem:{tot_mem}Mb, num_envs:{num_envs}, total_envs:{cfg.train.num_envs}')
+    
     print('run_id:', cfg.run_id)
     if ('load_jobid' in cfg) and (cfg['load_jobid'] is not None) and (cfg['load_jobid'] !=''):
         run_id = cfg.load_jobid
         load_cfg_path = Path(cfg.paths.base_dir) / f'run_id={run_id}/logs/run_config.yaml'
         cfg = OmegaConf.load(load_cfg_path)
+        continue_training = True
     else:
         run_id = cfg.run_id
+        continue_training = False
     # Create paths if they don't exist and Path objects
     for k in cfg.paths.keys():
         if k != "user":
@@ -89,33 +119,43 @@ def main(cfg: DictConfig) -> None:
     global EVAL_STEPS
     EVAL_STEPS = 0
     ########## Handling requeuing ##########
-    if ('restore_checkpoint' in cfg) and (cfg['load_restore_checkpointjobid'] is not None) and (cfg['restore_checkpoint'] !=''):
+    if ('restore_checkpoint' in cfg) and (cfg['jobid'] is not None) and (cfg['restore_checkpoint'] !=''):
         restore_checkpoint = cfg.restore_checkpoint
         print('Loading from ckpt:', restore_checkpoint)
     else: 
         try: #
             # Try to recover a state file with the relevant variables stored
             # from previous stop if any
-            model_path = cfg.paths.ckpt_dir / f"./{run_id}"
-            if model_path.exists():
+            model_path = cfg.paths.ckpt_dir
+            if any(model_path.iterdir()):
+                from natsort import natsorted
                 ##### Get all the checkpoint files #####
-                ckpt_files = sorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()])
+                ckpt_files = natsorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()])
                 ##### Get the latest checkpoint #####
                 max_ckpt = ckpt_files[-1]
                 EVAL_STEPS = int(max_ckpt.stem)
-                restore_checkpoint = max_ckpt.as_posix()
-                cfg = OmegaConf.load(cfg.paths.log_dir / "run_config.yaml")
-                cfg.dataset = cfg.dataset
-                cfg.dataset.env_args = cfg.dataset.env_args
-                env_cfg = cfg.dataset
-                env_args = cfg.dataset.env_args
-                print(f'Loading: {max_ckpt}')
+                if EVAL_STEPS > 0 :
+                    restore_checkpoint = max_ckpt
+                    cfg = OmegaConf.load(cfg.paths.log_dir / "run_config.yaml")
+                    cfg.dataset = cfg.dataset
+                    cfg.dataset.env_args = cfg.dataset.env_args
+                    env_cfg = cfg.dataset
+                    env_args = cfg.dataset.env_args
+                    continue_training = True
+                    print(f'Loading: {max_ckpt}')
+                else:
+                    raise ValueError('Model path does not exist. Starting from scratch.')
             else:
                 raise ValueError('Model path does not exist. Starting from scratch.')
         except (ValueError):
             # Otherwise bootstrap (start from scratch)
             print('Model path does not exist. Starting from scratch.')
             restore_checkpoint = None
+            
+    if  ('network_type' in cfg.train) and (cfg.train['network_type'] is not None) and ('encoderdecoder' in cfg.train['network_type']):
+        network_type = custom_ppo_networks.make_encoderdecoder_ppo_networks
+    else: 
+        network_type = custom_ppo_networks.make_intention_ppo_networks
 
     while not interrupted and not converged:
         # Init env
@@ -124,17 +164,16 @@ def main(cfg: DictConfig) -> None:
             reference_clip=reference_clip,
             **env_args,
         )
-        def create_mask():
-            from custom_brax.custom_losses import PPONetworkParams
-            mask = {'params': {'encoder': 'encoder', 'decoder': 'decoder'}}
-            value = {'params': 'encoder'}
-            return PPONetworkParams(mask,value)
-
 
         episode_length = (env_args.clip_length - 50 - env_args.ref_len) * env._steps_for_cur_frame
         print(f"episode_length {episode_length}")
 
-
+        options = ocp.CheckpointManagerOptions(save_interval_steps=1)
+        ckpt_mgr = ocp.CheckpointManager(
+            cfg.paths.ckpt_dir,
+            item_names=("normalizer_params", "params", "env_steps"),
+            options=options,
+        )
         train_fn = functools.partial(
             ppo.train,
             num_envs=cfg.train["num_envs"],
@@ -156,13 +195,23 @@ def main(cfg: DictConfig) -> None:
             batch_size=cfg.train["batch_size"],
             seed=cfg.train['seed'],
             network_factory=functools.partial(
-                custom_ppo_networks.make_intention_ppo_networks,
+                network_type,
                 encoder_hidden_layer_sizes=cfg.train['encoder_hidden_layer_sizes'],
                 decoder_hidden_layer_sizes=cfg.train['decoder_hidden_layer_sizes'],
                 value_hidden_layer_sizes=cfg.train['value_hidden_layer_sizes'],
             ),
-            restore_checkpoint_path=restore_checkpoint,
-            freeze_fn=None if (cfg.train['freeze_encoder'] == False) else create_mask,
+            checkpoint_network_factory=functools.partial(
+                    custom_ppo_networks.make_intention_ppo_networks,
+                    intention_latent_size=60,
+                    encoder_hidden_layer_sizes=cfg.train.ckpt_net['encoder_hidden_layer_sizes'],
+                    decoder_hidden_layer_sizes=cfg.train.ckpt_net['decoder_hidden_layer_sizes'],
+                    value_hidden_layer_sizes=cfg.train.ckpt_net['value_hidden_layer_sizes'],
+                ),
+            checkpoint_path=restore_checkpoint,
+            freeze_mask_fn=None if (cfg.train['freeze_decoder'] == False) else masks.create_decoder_mask,
+            continue_training=continue_training,
+            custom_wrap=True,  # custom wrappers to handle infos
+            kl_loss=cfg.train['kl_loss'],
         )
 
 
@@ -195,11 +244,11 @@ def main(cfg: DictConfig) -> None:
             global EVAL_STEPS
             EVAL_STEPS = EVAL_STEPS + 1
             print(f'Eval Step: {EVAL_STEPS}, num_steps: {num_steps}')
-            ckptr = ocp.Checkpointer(ocp.PyTreeCheckpointHandler())
-            save_args = orbax_utils.save_args_from_target(params)
-            path = model_path / f'{EVAL_STEPS:03d}'
-            os.makedirs(path, exist_ok=True)
-            ckptr.save(path, params, force=True, save_args=save_args)
+            # ckptr = ocp.Checkpointer(ocp.PyTreeCheckpointHandler())
+            # save_args = orbax_utils.save_args_from_target(params)
+            # path = model_path / f'{EVAL_STEPS:03d}'
+            # os.makedirs(path, exist_ok=True)
+            # ckptr.save(path, params, force=True, save_args=save_args)
             policy_params = (params[0],params[1].policy)
             Env_steps = params[2]
             jit_inference_fn = jax.jit(make_policy(policy_params, deterministic=True))
@@ -217,13 +266,18 @@ def main(cfg: DictConfig) -> None:
                 state = jit_step(state, ctrl)
                 rollout.append(state)
             ##### Log the rollout to wandb #####
-            log_eval_rollout(cfg,rollout,state,env,reference_clip,model_path,num_steps)
+            log_eval_rollout(cfg,rollout,state,env,reference_clip,model_path,EVAL_STEPS)
 
         if not (cfg.paths.log_dir / "run_config.yaml").exists():
             OmegaConf.save(cfg, cfg.paths.log_dir / "run_config.yaml")
         print(OmegaConf.to_yaml(cfg))
+        
+        
         make_inference_fn, params, _ = train_fn(
-            environment=env, progress_fn=wandb_progress, policy_params_fn=policy_params_fn
+            environment=env, 
+            progress_fn=wandb_progress, 
+            policy_params_fn=policy_params_fn,
+            checkpoint_manager=ckpt_mgr,
         )
 
         final_save_path = Path(f"{model_path}")/f'brax_ppo_{cfg.dataset.name}_run_finished'
