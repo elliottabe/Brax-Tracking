@@ -7,7 +7,6 @@ algo_name: ppo
 task_name: ${dataset.dname}
 note: 
 num_envs: 2048
-num_envs: 2048 
 num_timesteps: 10_000_000_000
 eval_every: 10_000_000
 num_resets_per_eval: 1
@@ -36,6 +35,11 @@ ckpt_net:
   value_hidden_layer_sizes: [256, 256]
 restore_checkpoint: ''
 freeze_decoder: False
+encoder_hidden_layer_sizes: [256, 256]
+decoder_hidden_layer_sizes: [256, 256]
+value_hidden_layer_sizes: [256, 256]
+restore_checkpoint: False
+freeze_encoder: False
 state_metric_list: 
   - pos_reward
   - quat_reward
