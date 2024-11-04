@@ -211,6 +211,7 @@ def main(cfg: DictConfig) -> None:
             freeze_mask_fn=None if (cfg.train['freeze_decoder'] == False) else masks.create_decoder_mask,
             continue_training=continue_training,
             custom_wrap=True,  # custom wrappers to handle infos
+            kl_loss=cfg.train['kl_loss'],
         )
 
 

@@ -142,3 +142,41 @@ def make_encoderdecoder_ppo_networks(
         value_network=value_network,
         parametric_action_distribution=parametric_action_distribution,
     )
+
+
+
+
+# random_decoder policy
+def make_randomdecoder_ppo_networks(
+    observation_size: int,
+    task_obs_size: int,
+    action_size: int,
+    preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    intention_latent_size: int = 60,
+    encoder_hidden_layer_sizes: Sequence[int] = (1024,) * 2,
+    decoder_hidden_layer_sizes: Sequence[int] = (1024,) * 2,
+    value_hidden_layer_sizes: Sequence[int] = (1024,) * 2,
+) -> PPOImitationNetworks:
+    """Make Imitation PPO networks with preprocessor."""
+    parametric_action_distribution = distribution.NormalTanhDistribution(
+        event_size=action_size
+    )
+    policy_network = custom_networks.make_random_intention_policy(
+        parametric_action_distribution.param_size,
+        latent_size=intention_latent_size,
+        total_obs_size=observation_size,
+        task_obs_size=task_obs_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        decoder_hidden_layer_sizes=decoder_hidden_layer_sizes,
+    )
+    value_network = networks.make_value_network(
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=value_hidden_layer_sizes,
+    )
+
+    return PPOImitationNetworks(
+        policy_network=policy_network,
+        value_network=value_network,
+        parametric_action_distribution=parametric_action_distribution,
+    )

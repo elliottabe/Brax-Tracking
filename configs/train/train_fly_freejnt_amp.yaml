@@ -21,6 +21,7 @@ num_updates_per_batch: 8
 discounting: 0.95
 learning_rate: 1e-4
 kl_weight: 1e-2
+kl_loss: True
 entropy_cost: 1e-2
 batch_size: ${train.num_envs}
 seed: 0

@@ -199,7 +199,7 @@ def make_random_intention_policy(
     task_obs_size: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     decoder_hidden_layer_sizes: Sequence[int] = (1024, 1024),
-) -> IntentionNetwork:
+) -> RandomIntentionNetwork:
     """Creates an intention policy network."""
 
     policy_module = RandomIntentionNetwork(
