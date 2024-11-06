@@ -30,7 +30,6 @@ from flax.training import orbax_utils
 # from envs.rodent import RodentSingleClip
 from preprocessing.preprocess import process_clip_to_train
 from envs.Fly_Env_Brax import FlyTracking, FlyMultiClipTracking, FlyRunSim
-# from envs.fruitfly import Fruitfly_Tethered, Fruitfly_Run, FlyRunSim, FlyStand, Fruitfly_Freejnt
 from utils.utils import *
 from utils.fly_logging import log_eval_rollout
 
