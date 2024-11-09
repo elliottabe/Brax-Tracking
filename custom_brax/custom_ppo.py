@@ -330,6 +330,7 @@ def train(
 
         # Only partially replace initial policy if freezing decoder
         if freeze_mask_fn is not None:
+            ######## Need to change this to include freezing sensory network
             init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
                 "decoder"
             ]

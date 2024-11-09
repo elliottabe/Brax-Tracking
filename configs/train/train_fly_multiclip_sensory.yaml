@@ -1,4 +1,4 @@
-name: train_fly_multiclip
+name: train_fly_multiclip_sensory
 version: ${resolve_default:debug,${..version}}
 gpu: ${resolve_default:0,${..gpu}}
 wandb_project: "hg_debug"
@@ -25,16 +25,19 @@ kl_loss: True
 entropy_cost: 1e-2
 batch_size: ${train.num_envs}
 seed: 0
-network_type: intention
+network_type: sensoryintention
 encoder_hidden_layer_sizes: [256, 256]
 decoder_hidden_layer_sizes: [256, 256]
 value_hidden_layer_sizes: [256, 256]
+sensory_hidden_layer_sizes: [256, 60]
 ckpt_net:
   encoder_hidden_layer_sizes: [256, 256]
   decoder_hidden_layer_sizes: [256, 256]
   value_hidden_layer_sizes: [256, 256]
+  sensory_hidden_layer_sizes: [256, 60]
 restore_checkpoint: ''
 freeze_decoder: False
+freeze_sensory: True
 state_metric_list: 
   - pos_reward
   - quat_reward

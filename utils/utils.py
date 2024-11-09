@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -7,6 +8,7 @@ from omegaconf import OmegaConf
 from pathlib import Path
 
 import utils.io_dict_to_hdf5 as ioh5
+import jax.numpy as jnp
 
 ##### Custom Resolver #####
 OmegaConf.register_new_resolver('eq', lambda x, y: x.lower()==y.lower())
@@ -55,3 +57,37 @@ def load_cfg(cfg_path, default_model_config=None):
         params = OmegaConf.load(default_model_config)
         cfg.dataset = OmegaConf.merge(params, params_curr)
     return cfg
+
+
+def load_feco_data( fpath, fnum=-1 ):
+    """ Load rollout data from a .pkl file
+    """
+    pkl_files = list(Path(fpath).glob('rollout*.pkl'))
+    pfile = pkl_files[fnum]
+    data = pickle.load(open(pfile, 'rb'))
+
+    leg_qpos_idx = np.arange(7,43)
+    leg_qvel_idx = np.arange(6,42)
+    all_poses = []
+    all_vel = []
+    for jj in leg_qpos_idx:
+        jp = []
+        for key in data.keys():
+            if 'qposes' in data[key].keys():
+                jp.append(data[key]['qposes'][:,jj])
+        all_poses.append(np.concatenate(jp,axis=0))
+
+    for jj in leg_qvel_idx:
+        jp2 = []
+        for key in data.keys():
+            if 'qvels' in data[key].keys():
+                jp2.append(data[key]['qvels'][:,jj])
+        all_vel.append(np.concatenate(jp2,axis=0))
+
+    all_poses = jnp.array(all_poses).T
+    all_vel = jnp.array(all_vel).T
+    dic = {'poses': all_poses, 'vels': all_vel, 
+           'ameans':jnp.mean(all_poses,axis=0), 'astd':jnp.std(all_poses,axis=0), 
+           'vmeans':jnp.mean(all_vel,axis=0), 'vstd':jnp.std(all_vel,axis=0) 
+           }
+    return dic

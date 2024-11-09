@@ -19,6 +19,38 @@ def create_decoder_mask(params, decoder_name="decoder"):
     return param_mask
 
 
+def create_sensory_mask(params, layer_name="sensory"):
+    """Creates mask where the depth of nodes that contains 'sensory' becomes leaves, and sensory encoder is set to frozen, and the rest to learned."""
+
+    param_mask = copy.deepcopy(params)
+    for key in param_mask.policy["params"]:
+        if layer_name in key:
+            param_mask.policy["params"][key] = "frozen"
+        else:
+            param_mask.policy["params"][key] = "learned"
+
+    for key in param_mask.value:
+        param_mask.value[key] = "learned"
+
+    return param_mask
+
+def create_multiple_masks(params, layer_name=["sensory","decoder"]):
+    """Creates mask where the depth of nodes that contains 'sensory' or 'decoder' becomes leaves, 
+    and sensory encoder is set to frozen, and the rest to learned."""
+
+    param_mask = copy.deepcopy(params)
+    for key in param_mask.policy["params"]:
+        if any(lname in key for lname in layer_name):
+            param_mask.policy["params"][key] = "frozen"
+        else:
+            param_mask.policy["params"][key] = "learned"
+
+    for key in param_mask.value:
+        param_mask.value[key] = "learned"
+
+    return param_mask
+
+
 def create_bias_mask(params):
     """Creates boolean mask were any leaves under decoder are set to False."""
 
