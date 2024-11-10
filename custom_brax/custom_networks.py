@@ -80,7 +80,7 @@ class IntentionNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar}
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, 'z': z}
 
 
 class EncoderDecoderNetwork(nn.Module):

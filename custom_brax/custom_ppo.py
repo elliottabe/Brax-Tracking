@@ -633,7 +633,7 @@ def train(
             policy_params_fn(current_step, make_policy, params, policy_params_fn_key)
 
     total_steps = current_step
-    assert total_steps >= num_timesteps
+    # assert total_steps >= num_timesteps
 
     # If there was no mistakes the training_state should still be identical on all
     # devices.

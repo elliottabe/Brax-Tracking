@@ -7,7 +7,7 @@ algo_name: ppo
 task_name: ${dataset.dname}
 note: 
 num_envs: 2048 
-num_timesteps: 10_000_000_000
+num_timesteps: 20_000_000_000
 eval_every: 200_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
