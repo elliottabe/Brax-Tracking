@@ -90,6 +90,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                 angle_std = feco_data['astd'],
                 vel_means = feco_data['vmeans'],
                 vel_std = feco_data['vstd'],
+                std_scale = cfg.train['std_scale'],
                 )
             checkpoint_network_factory=functools.partial(
                     network_type,
@@ -103,6 +104,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                     angle_std = feco_data['astd'],
                     vel_means = feco_data['vmeans'],
                     vel_std = feco_data['vstd'],
+                    std_scale = cfg.train['std_scale'],
                     )
             
     

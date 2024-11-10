@@ -34,12 +34,14 @@ sensory_hidden_layer_sizes: [0]
 sensory_neurons: 2
 random_feco_bias: False
 intention_latent_size: 60
+std_scale: .75
 ckpt_net:
   encoder_hidden_layer_sizes: [256, 256]
   decoder_hidden_layer_sizes: [256, 256]
   value_hidden_layer_sizes: [256, 256]
   sensory_hidden_layer_sizes: [0]
   sensory_neurons: 2
+  std_scale: .75
 restore_checkpoint: ''
 freeze_decoder: False
 freeze_sensory: True

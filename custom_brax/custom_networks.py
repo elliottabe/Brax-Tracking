@@ -57,6 +57,7 @@ class CustomFeco(nn.Module):
     activation: networks.ActivationFn = nn.relu
     activate_layer: bool = True
     random_bias: bool = False
+    scale: float = 1.1
 
     @nn.compact
     def __call__(self, x, eps=1e-3):
@@ -64,8 +65,8 @@ class CustomFeco(nn.Module):
         assert self.angle_means.shape == (self.nangles,)
         assert self.angle_std.shape == (self.nangles,)
         std = self.angle_std + eps * jax.random.uniform(jax.random.PRNGKey(0), shape=self.angle_std.shape) # if there are zeros in angle_std
-        weight_init = FecoWeightInitializer(std, nneu=self.nneurons)
-        bias_init = FecoBiasInitializer(self.angle_means / std, nneu=self.nneurons, random_bias=self.random_bias)
+        weight_init = FecoWeightInitializer(std, nneu=self.nneurons, scale=self.scale )
+        bias_init = FecoBiasInitializer(self.angle_means / std, nneu=self.nneurons, random_bias=self.random_bias, scale=self.scale )
         x = nn.Dense(features=output_features, kernel_init=weight_init, bias_init= bias_init, name="feco")(x)
         if self.activate_layer:
             x = self.activation(x)
@@ -628,15 +629,17 @@ class SensoryEncodingNetwork(nn.Module):
     activation: networks.ActivationFn = nn.relu
     body_pos: int = 7
     body_vel: int = 6
+    std_scale: float = 1.1
     #npos: int = -1      # specify how many qpos are there, default is 7 + joints
     #nvel: int = -1      # specify how many qvel are there, default is 6 + joints
     joint_idx: Sequence[int] = dataclasses.field(default_factory=lambda: [0]) # not used yet -> since it can be non-contiguous?
+    
 
     def setup(self):
         self.sensory_hook = CustomFeco(nangles=self.joints, angle_means=self.vel_means, angle_std=self.vel_std, 
-                                          nneurons=self.nneurons, activation=self.activation,)
+                                          nneurons=self.nneurons, activation=self.activation, scale=self.std_scale, )
         self.sensory_claw = CustomFeco(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
-                                          nneurons=self.nneurons, activation=self.activation)
+                                          nneurons=self.nneurons, activation=self.activation, scale=self.std_scale, )
         #if self.npos < 0:
         self.npos = self.joints + self.body_pos
         #if self.nvel < 0:
@@ -748,6 +751,7 @@ def make_sensory_encoding_network(
     vel_means: jnp.ndarray = jnp.zeros(36),
     vel_std: jnp.ndarray = jnp.ones(36),
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
+    std_scale = 1.1,
 ) -> networks.FeedForwardNetwork:
     """
     Minimal function to create a sensory encoding network that takes in observations and returns sensory latents.
@@ -763,6 +767,7 @@ def make_sensory_encoding_network(
         vel_means=vel_means,
         vel_std=vel_std,
         nneurons=nneurons,
+        std_scale=std_scale,
     )
 
     def encode_senses(processor_params, sensory_params, obs, key):
@@ -793,6 +798,7 @@ def make_intention_and_sensory_networks(
     angle_std: jnp.ndarray = jnp.ones(36)*.5,
     vel_means: jnp.ndarray = jnp.zeros(36),
     vel_std: jnp.ndarray = jnp.ones(36),
+    std_scale = 1.1,
     ) -> Tuple[IntentionNetwork, networks.FeedForwardNetwork]:
     """Creates an intention policy network and a sensory encoding network."""
     sense_latent_size = 7 + 6 + 2 * joints * nneurons
@@ -801,7 +807,7 @@ def make_intention_and_sensory_networks(
                                                sense_latent_size=sense_latent_size, encoder_hidden_layer_sizes=encoder_hidden_layer_sizes, decoder_hidden_layer_sizes=decoder_hidden_layer_sizes,
                                                preprocess_observations_fn=preprocess_observations_fn)
     sensory_net = make_sensory_encoding_network(total_obs_size=total_obs_size, task_obs_size=task_obs_size, 
-                                                joints=joints, joint_idx=joint_idx, nneurons=nneurons,
+                                                joints=joints, joint_idx=joint_idx, nneurons=nneurons, std_scale=std_scale,
                                                angle_means=angle_means, angle_std=angle_std, vel_means=vel_means, vel_std=vel_std, 
                                                preprocess_observations_fn=preprocess_observations_fn)
     return (intention_net, sensory_net)
