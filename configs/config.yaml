@@ -3,7 +3,7 @@ dataset_name: ${dataset.name}
 
 ##### Easy Access Variables #####
 # if set to positive integer, overrides the default
-version: 'sep_sensory_debug'
+version: ''
 seed: 9
 num_gpus: 1
 run_id: 999

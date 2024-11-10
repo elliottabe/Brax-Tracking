@@ -1,10 +1,10 @@
-user: eabe
+user: hg
 
 # set the directory where the output files get saved
-cwd_dir:  /mmfs1/home/${paths.user}/Research/MyRepos/Brax-Tracking
+cwd_dir:  /gscratch/portia/${paths.user}/Github/Brax-Tracking
 base_dir: /gscratch/portia/${paths.user}/biomech_model/${dataset.name}/RL_${dataset.name}/${train.version}
 save_dir: ${paths.base_dir}/${hydra:job.override_dirname}
 log_dir:  ${paths.save_dir}/logs/
 ckpt_dir: ${paths.save_dir}/ckpt/
 fig_dir:  ${paths.save_dir}/figures/
-data_dir: /gscratch/portia/${paths.user}/biomech_model/${dataset.name}/datasets/Tuthill_data/
+data_dir: /gscratch/portia/${paths.user}/biomech_model/${dataset.name}/datasets/Tuthill_data
