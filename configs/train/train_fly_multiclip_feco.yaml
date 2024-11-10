@@ -1,0 +1,64 @@
+name: train_fly_multiclip_feco
+version: ${resolve_default:sensory_debug,${..version}}
+gpu: ${resolve_default:0,${..gpu}}
+wandb_project: "hg_debug"
+env_name: fly_freejnt_multiclip
+algo_name: ppo
+task_name: ${dataset.dname}
+note: 
+num_envs: 2048
+num_timesteps: 10_000_000_000
+eval_every: 10_000_000
+num_resets_per_eval: 1
+reward_scaling: 1
+episode_length: 1001
+normalize_observations: True
+action_repeat: 1
+clipping_epsilon: 0.2
+unroll_length: 20
+num_minibatches: 32
+num_updates_per_batch: 8
+discounting: 0.95
+learning_rate: 2e-5
+kl_weight: 0.1
+kl_loss: True
+entropy_cost: 1e-2
+batch_size: ${train.num_envs}
+seed: 0
+network_type: fecointention
+encoder_hidden_layer_sizes: [256, 256]
+decoder_hidden_layer_sizes: [256, 256]
+value_hidden_layer_sizes: [256, 256]
+sensory_hidden_layer_sizes: [0]
+sensory_neurons: 2
+random_feco_bias: False
+ckpt_net:
+  encoder_hidden_layer_sizes: [256, 256]
+  decoder_hidden_layer_sizes: [256, 256]
+  value_hidden_layer_sizes: [256, 256]
+  sensory_hidden_layer_sizes: [0]
+  sensory_neurons: 2
+restore_checkpoint: ''
+freeze_decoder: False
+freeze_sensory: True
+state_metric_list: 
+  - pos_reward
+  - quat_reward
+  - joint_reward
+  - angvel_reward
+  - bodypos_reward
+  - endeff_reward
+  - reward_ctrlcost
+  - too_far
+  - bad_pose
+  - bad_quat
+  - termination
+  - fall
+info_metric_list: 
+  - cur_frame
+  - summed_pos_distance
+  - quat_distance
+  - joint_distance
+  - angvel_distance
+  - bodypos_distance
+  - endeff_distance

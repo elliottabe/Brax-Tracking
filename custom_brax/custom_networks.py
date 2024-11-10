@@ -628,19 +628,19 @@ class SensoryEncodingNetwork(nn.Module):
     activation: networks.ActivationFn = nn.relu
     body_pos: int = 7
     body_vel: int = 6
-    npos: int = -1      # specify how many qpos are there, default is 7 + joints
-    nvel: int = -1      # specify how many qvel are there, default is 6 + joints
-    joint_idx: Sequence[int] = [0] # not used yet -> since it can be non-contiguous?
+    #npos: int = -1      # specify how many qpos are there, default is 7 + joints
+    #nvel: int = -1      # specify how many qvel are there, default is 6 + joints
+    joint_idx: Sequence[int] = dataclasses.field(default_factory=lambda: [0]) # not used yet -> since it can be non-contiguous?
 
     def setup(self):
         self.sensory_hook = CustomFeco(nangles=self.joints, angle_means=self.vel_means, angle_std=self.vel_std, 
                                           nneurons=self.nneurons, activation=self.activation,)
         self.sensory_claw = CustomFeco(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
                                           nneurons=self.nneurons, activation=self.activation)
-        if self.npos < 0:
-            self.npos = self.joints + self.body_pos
-        if self.nvel < 0:
-            self.nvel = self.joints + self.body_vel
+        #if self.npos < 0:
+        self.npos = self.joints + self.body_pos
+        #if self.nvel < 0:
+        self.nvel = self.joints + self.body_vel
 
     def __call__(self, obs, key):
         #_, encoder_rng = jax.random.split(key)
@@ -795,11 +795,13 @@ def make_intention_and_sensory_networks(
     vel_std: jnp.ndarray = jnp.ones(36),
     ) -> Tuple[IntentionNetwork, networks.FeedForwardNetwork]:
     """Creates an intention policy network and a sensory encoding network."""
-    sense_latent_size = 7 + 6 + 2 * joints
+    sense_latent_size = 7 + 6 + 2 * joints * nneurons
+
     intention_net = make_intention_w_sl_policy( param_size=param_size, latent_size=latent_size, total_obs_size=total_obs_size, task_obs_size=task_obs_size,
                                                sense_latent_size=sense_latent_size, encoder_hidden_layer_sizes=encoder_hidden_layer_sizes, decoder_hidden_layer_sizes=decoder_hidden_layer_sizes,
                                                preprocess_observations_fn=preprocess_observations_fn)
-    sensory_net = make_sensory_encoding_network(total_obs_size=total_obs_size, task_obs_size=task_obs_size, joints=joints, joint_idx=joint_idx, nneurons=nneurons,
+    sensory_net = make_sensory_encoding_network(total_obs_size=total_obs_size, task_obs_size=task_obs_size, 
+                                                joints=joints, joint_idx=joint_idx, nneurons=nneurons,
                                                angle_means=angle_means, angle_std=angle_std, vel_means=vel_means, vel_std=vel_std, 
                                                preprocess_observations_fn=preprocess_observations_fn)
     return (intention_net, sensory_net)

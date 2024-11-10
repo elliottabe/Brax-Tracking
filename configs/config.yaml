@@ -3,10 +3,10 @@ dataset_name: ${dataset.name}
 
 ##### Easy Access Variables #####
 # if set to positive integer, overrides the default
-version: ''
-seed: 42
+version: 'sep_sensory_debug'
+seed: 9
 num_gpus: 1
-run_id: 10
+run_id: 999
 load_jobid: ''
 
 # train: train_${dataset.dname}
@@ -15,7 +15,7 @@ load_jobid: ''
 defaults:
   - _self_
   - dataset: fly_multiclip
-  - train: train_fly_multiclip
+  - train: train_fly_multiclip_feco
   - paths: glados
   # - override hydra/launcher: joblib
   # - hydra/job_logging: disabled

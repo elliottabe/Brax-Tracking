@@ -1,5 +1,5 @@
 import jax
-from custom_brax.custom_losses import PPONetworkParams
+from custom_brax.custom_losses import PPONetworkParams, PPOSensingNetworkParams
 import copy
 
 
@@ -23,6 +23,13 @@ def create_sensory_mask(params, layer_name="sensory"):
     """Creates mask where the depth of nodes that contains 'sensory' becomes leaves, and sensory encoder is set to frozen, and the rest to learned."""
 
     param_mask = copy.deepcopy(params)
+    try:
+        for key in param_mask.sensory["params"]:
+                param_mask.sensory["params"][key] = "frozen" # freeze all sensory params
+    except:
+        pass #no sensory parmas
+
+    
     for key in param_mask.policy["params"]:
         if layer_name in key:
             param_mask.policy["params"][key] = "frozen"
@@ -39,6 +46,13 @@ def create_multiple_masks(params, layer_name=["sensory","decoder"]):
     and sensory encoder is set to frozen, and the rest to learned."""
 
     param_mask = copy.deepcopy(params)
+    if 'sensory' in layer_name:
+        try:
+            for key in param_mask.sensory["params"]:
+                param_mask.sensory["params"][key] = "frozen"
+        except:
+            pass #no sensory params
+
     for key in param_mask.policy["params"]:
         if any(lname in key for lname in layer_name):
             param_mask.policy["params"][key] = "frozen"

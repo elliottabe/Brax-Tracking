@@ -17,10 +17,11 @@
 See: https://arxiv.org/pdf/1707.06347.pdf
 """
 
-from typing import Any, Tuple
+from typing import Any, Tuple, Union
 
 from brax.training import types
 from brax.training.agents.ppo import networks as ppo_networks
+from custom_brax.custom_ppo_networks import PPOImitationNetworks, PPOSensingImitationNetworks
 from brax.training.types import Params
 import flax
 import jax
@@ -31,6 +32,14 @@ import jax.numpy as jnp
 class PPONetworkParams:
     """Contains training state for the learner."""
 
+    policy: Params
+    value: Params
+
+@flax.struct.dataclass
+class PPOSensingNetworkParams:
+    """Contains training state for the learner."""
+    
+    sensory: Params
     policy: Params
     value: Params
 
@@ -100,11 +109,11 @@ def compute_gae(
 
 
 def compute_ppo_loss(
-    params: PPONetworkParams,
+    params: Union[PPOSensingNetworkParams,PPONetworkParams],
     normalizer_params: Any,
     data: types.Transition,
     rng: jnp.ndarray,
-    ppo_network: ppo_networks.PPONetworks,
+    ppo_network:Union[PPOImitationNetworks,PPOSensingImitationNetworks,ppo_networks.PPONetworks], #ppo_networks.PPONetworks,
     entropy_cost: float = 1e-4,
     kl_weight: float = 1e-3,
     discounting: float = 0.9,
@@ -135,16 +144,23 @@ def compute_ppo_loss(
       A tuple (loss, metrics)
     """
 
-    _, policy_key, entropy_key = jax.random.split(rng, 3)
+    sensory_key, policy_key, entropy_key = jax.random.split(rng, 3)
     parametric_action_distribution = ppo_network.parametric_action_distribution
+    if isinstance(ppo_network, PPOSensingImitationNetworks):
+        sensory_apply = ppo_network.sensory_network.apply
     policy_apply = ppo_network.policy_network.apply
     value_apply = ppo_network.value_network.apply
 
     # Put the time dimension first.
     data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
-    policy_logits, extras = policy_apply(
-        normalizer_params, params.policy, data.observation, policy_key
-    )
+    if isinstance(params, PPOSensingNetworkParams) and isinstance(ppo_network, PPOSensingImitationNetworks):
+        sensory_latents = sensory_apply( normalizer_params, params.sensory, data.observation, sensory_key )    
+        policy_logits, extras = policy_apply(
+            normalizer_params, params.policy, data.observation, sensory_latents, policy_key )
+    else:
+        policy_logits, extras = policy_apply(
+            normalizer_params, params.policy, data.observation, policy_key
+        )
 
     baseline = value_apply(normalizer_params, params.value, data.observation)
 

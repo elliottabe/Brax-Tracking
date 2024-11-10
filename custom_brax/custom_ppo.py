@@ -55,13 +55,20 @@ Metrics = types.Metrics
 
 _PMAP_AXIS_NAME = "i"
 
+'''
+Update note: 
+New PPO training and evaluation function that includes sensory network
+PPOSensingNetworkParams is a new dataclass that includes sensory params, policy params and value params
+PPOSensingImitationNetworks is a new network that includes sensory network, policy network and value network
+HG on 2024-11-08
+'''
 
 @flax.struct.dataclass
 class TrainingState:
     """Contains training state for the learner."""
 
     optimizer_state: optax.OptState
-    params: ppo_losses.PPONetworkParams
+    params: Union[ppo_losses.PPONetworkParams, ppo_losses.PPOSensingNetworkParams]
     normalizer_params: running_statistics.RunningStatisticsState
     env_steps: jnp.ndarray
 
@@ -106,24 +113,28 @@ def train(
     clipping_epsilon: float = 0.3,
     gae_lambda: float = 0.95,
     deterministic_eval: bool = False,
+    ###### TO DO: add make_feco_intention_ppo_networks
     network_factory: types.NetworkFactory[
-        custom_ppo_networks.PPOImitationNetworks
-    ] = custom_ppo_networks.make_intention_ppo_networks,
+        Union[custom_ppo_networks.PPOSensingImitationNetworks, custom_ppo_networks.PPOImitationNetworks]
+    ] = custom_ppo_networks.make_intention_ppo_networks, # custom_ppo_networks.make_separate_sensory_and_intention_networks,
     progress_fn: Callable[[int, Metrics], None] = lambda *args: None,
     normalize_advantage: bool = True,
     eval_env: Optional[envs.Env] = None,
-    policy_params_fn: Callable[..., None] = lambda *args: None,
+    policy_params_fn: Callable[..., None] = lambda *args: None,  # includes sensory and intention networks
     randomization_fn: Optional[
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
     freeze_mask_fn=None,
     checkpoint_path: Optional[Path] = None,
+    ###### TO DO: add make_feco_intention_ppo_networks ----> DONE
     checkpoint_network_factory: types.NetworkFactory[
-        custom_ppo_networks.PPOImitationNetworks
+        Union[custom_ppo_networks.PPOSensingImitationNetworks, custom_ppo_networks.PPOImitationNetworks]
     ] = custom_ppo_networks.make_intention_ppo_networks,
     tracking_task_obs_size: int = 470,
     continue_training: bool = False,
     custom_wrap: bool = False,
+    freeze_decoder: bool = False,
+    freeze_sensory: bool = True,
 ):
     """PPO training.
 
@@ -163,7 +174,7 @@ def train(
       clipping_epsilon: clipping epsilon for PPO loss
       gae_lambda: General advantage estimation lambda
       deterministic_eval: whether to run the eval with a deterministic policy
-      network_factory: function that generates networks for policy and value
+      network_factory: function that generates networks for (sensory), policy and value
         functions
       progress_fn: a user-defined callback function for reporting/plotting metrics
       normalize_advantage: whether to normalize advantage estimate
@@ -220,7 +231,7 @@ def train(
     local_key, key_env, eval_key = jax.random.split(local_key, 3)
     # key_networks should be global, so that networks are initialized the same
     # way for different processes.
-    key_policy, key_value, policy_params_fn_key = jax.random.split(global_key, 3)
+    key_sensory, key_policy, key_value, policy_params_fn_key = jax.random.split(global_key, 4)
     del global_key
 
     assert num_envs % device_count == 0
@@ -256,6 +267,7 @@ def train(
     if normalize_observations:
         normalize = running_statistics.normalize
     task_obs_size = _unpmap(env_state.info["task_obs_size"])[0]
+    ### pass essential args shared across all constructors
     ppo_network = network_factory(
         env_state.obs.shape[-1],
         task_obs_size,
@@ -263,13 +275,27 @@ def train(
         preprocess_observations_fn=normalize,
     )
 
-    make_policy = custom_ppo_networks.make_inference_fn(ppo_network)
 
+    # ###### TO DO: add new inference function --> DONE
+    if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+        make_policy = custom_ppo_networks.make_sensory_inference_fn(ppo_network)
+    else:
+        make_policy = custom_ppo_networks.make_inference_fn(ppo_network)
 
-    init_params = ppo_losses.PPONetworkParams(
-        policy=ppo_network.policy_network.init(key_policy),
-        value=ppo_network.value_network.init(key_value),
-    )
+    
+    ## Initialize network params
+    if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+        init_params = ppo_losses.PPOSensingNetworkParams(
+            sensory=ppo_network.sensory_network.init(key_sensory),  # redefined network params
+            policy=ppo_network.policy_network.init(key_policy),
+            value=ppo_network.value_network.init(key_value),
+        )
+    ##### init for older PPO networks without sensory params
+    else:
+        init_params = ppo_losses.PPONetworkParams(
+            policy=ppo_network.policy_network.init(key_policy),
+            value=ppo_network.value_network.init(key_value),
+        )
 
     if freeze_mask_fn is not None:
         optimizer = optax.multi_transform(
@@ -310,10 +336,17 @@ def train(
             env.action_size,
             preprocess_observations_fn=running_statistics.normalize,
         )
-        checkpoint_init_params = ppo_losses.PPONetworkParams(
-            policy=checkpoint_ppo_network.policy_network.init(key_policy),
-            value=checkpoint_ppo_network.value_network.init(key_value),
-        )
+        if isinstance(checkpoint_ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+            checkpoint_init_params = ppo_losses.PPOSensingNetworkParams(
+                sensory=checkpoint_ppo_network.sensory_network.init(key_sensory),
+                policy=checkpoint_ppo_network.policy_network.init(key_policy),
+                value=checkpoint_ppo_network.value_network.init(key_value),
+            )
+        else:
+            checkpoint_init_params = ppo_losses.PPONetworkParams(
+                policy=checkpoint_ppo_network.policy_network.init(key_policy),
+                value=checkpoint_ppo_network.value_network.init(key_value),
+            )
         target = ocp.args.Composite(
             normalizer_params=ocp.args.StandardRestore(
                 running_statistics.init_state(
@@ -329,11 +362,8 @@ def train(
         env_steps = loaded_ckpt["env_steps"]
 
         # Only partially replace initial policy if freezing decoder
-        if freeze_mask_fn is not None:
-            ######## Need to change this to include freezing sensory network
-            init_params.policy["params"]["decoder"] = loaded_params.policy["params"][
-                "decoder"
-            ]
+        ##### TO DO: freeze sensory params ----> doesn't handle sensory params within decoder properly yet
+        if freeze_decoder or freeze_sensory:
             running_statistics_mask = jnp.arange(env_state.obs.shape[-1]) < int(
                 task_obs_size
             )
@@ -354,9 +384,27 @@ def train(
                 == training_state.normalizer_params.mean.shape
             )
         else:
+            if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+                init_params = init_params.replace(sensory=loaded_params.sensory)
             init_params = init_params.replace(policy=loaded_params.policy)
             running_statistics_mask = None
-            normalizer_params=loaded_normalizer_params
+            normalizer_params = loaded_normalizer_params
+
+        if freeze_sensory:
+            if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+                init_params.sensory["params"] = loaded_params.sensory["params"]
+            for key in loaded_params.policy.keys():
+                if 'sensory' in key:
+                    init_params.policy["params"][key] = loaded_params.policy["params"][key]
+        else:
+            if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+                init_params = init_params.replace(sensory=loaded_params.sensory)
+        
+        if freeze_decoder:
+            ######## Need to change this to include freezing sensory network
+            init_params.policy["params"]["decoder"] = loaded_params.policy["params"]["decoder"]
+        else:
+            init_params = init_params.replace(policy=loaded_params.policy)
 
         if continue_training:
             print('continuing training')
@@ -444,9 +492,16 @@ def train(
         training_state, state, key = carry
         key_sgd, key_generate_unroll, new_key = jax.random.split(key, 3)
 
-        policy = make_policy(
-            (training_state.normalizer_params, training_state.params.policy)
-        )
+
+        #### TO DO: add sensory params  ---> DONE
+        if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+            policy = make_policy(
+                (training_state.normalizer_params, training_state.params.policy, training_state.params.sensory)
+                )
+        else:
+            policy = make_policy(
+                (training_state.normalizer_params, training_state.params.policy)
+                )
 
         def f(carry, unused_t):
             current_state, current_key = carry
@@ -559,25 +614,31 @@ def train(
         randomization_fn=v_randomization_fn,
     )
 
-    evaluator = acting.Evaluator(
-        eval_env,
-        functools.partial(make_policy, deterministic=deterministic_eval),
-        num_eval_envs=num_eval_envs,
-        episode_length=episode_length,
-        action_repeat=action_repeat,
-        key=eval_key,
+    evaluator = acting.Evaluator(  # expects:    
+        eval_env,       # eval_env: envs.Env,
+        functools.partial(make_policy, deterministic=deterministic_eval),   # eval_policy_fn: Callable[[PolicyParams], Policy], --> technically PolicyParams is only (normalizer, policy) but can send (normalzer, actor, sensory) if make_policy fn expects it and still returns a policy
+        num_eval_envs=num_eval_envs,        # num_eval_envs: int,   # num_eval_envs: int,
+        episode_length=episode_length,      # episode_length: int, 
+        action_repeat=action_repeat,        #  action_repeat: int,
+        key=eval_key,                       # key: PRNGKey,    
     )
 
     # Run initial eval
     metrics = {}
     if process_id == 0 and num_evals > 1:
+        print('-------------- running initial evaluation --------------')
+        if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+            pcopy = (training_state.normalizer_params, training_state.params.policy, training_state.params.sensory)
+        else:
+            pcopy = (training_state.normalizer_params, training_state.params.policy)
         metrics = evaluator.run_evaluation(
-            _unpmap((training_state.normalizer_params, training_state.params.policy)),
+            _unpmap(pcopy),
             training_metrics={},
         )
         logging.info(metrics)
         progress_fn(0, metrics)
 
+    print('-------------- starting training --------------')
     training_metrics = {}
     training_walltime = 0
     current_step = 0
@@ -601,15 +662,17 @@ def train(
 
         if process_id == 0:
             # Run evals.
+            if isinstance(ppo_network, custom_ppo_networks.PPOSensingImitationNetworks):
+                pcopy = (training_state.normalizer_params, training_state.params.policy, training_state.params.sensory)
+            else:
+                pcopy =  (training_state.normalizer_params, training_state.params.policy)
             metrics = evaluator.run_evaluation(
-                _unpmap(
-                    (training_state.normalizer_params, training_state.params.policy)
-                ),
+                _unpmap(  pcopy  ),
                 training_metrics,
             )
             logging.info(metrics)
             progress_fn(current_step, metrics)
-            params = _unpmap(
+            results = _unpmap(
                 (
                     training_state.normalizer_params,
                     training_state.params,
@@ -619,16 +682,16 @@ def train(
             # Save checkpoint
             checkpoint_manager.save(
                 it,
-                params,
+                results,
                 args=ocp.args.Composite(
-                    normalizer_params=ocp.args.StandardSave(params[0]),
-                    params=ocp.args.StandardSave(params[1]),
-                    env_steps=ocp.args.ArraySave(params[2]),
+                    normalizer_params=ocp.args.StandardSave(results[0]),
+                    params=ocp.args.StandardSave(results[1]),
+                    env_steps=ocp.args.ArraySave(results[2]),
                 ),
             )
 
             _, policy_params_fn_key = jax.random.split(policy_params_fn_key)
-            policy_params_fn(current_step, make_policy, params, policy_params_fn_key)
+            policy_params_fn(current_step, make_policy, results, policy_params_fn_key)
 
     total_steps = current_step
     assert total_steps >= num_timesteps
