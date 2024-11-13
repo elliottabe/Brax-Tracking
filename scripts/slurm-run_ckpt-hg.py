@@ -113,7 +113,7 @@ if __name__ == "__main__":
     
 ##### Saving commands #####
 #### cancel all jobs: squeue -u $USER -h | awk '{print $1}' | xargs scancel
-# python scripts/slurm-run_ckpt-hg.py --train=train_fly_multiclip_feco_v2 --dataset=fly_multiclip --num_envs=2048 --note='sensory_network'
+# python scripts/slurm-run_ckpt-hg.py --train=train_fly_multiclip_feco_v2 --dataset=fly_multiclip --num_envs=2048 --note='sensory_network' --num_gpus=2
 
 
 # python scripts/slurm-run_ckpt_new.py --dataset=fly_multiclip --num_envs=2048 --note='hyak_ckpt'

@@ -10,6 +10,8 @@ import functools
 from utils.utils import *
 from custom_brax import custom_ppo_networks
 from custom_brax import network_masks as masks
+from custom_brax import custom_networks as networks
+import flax.linen as nn
 
 #### setup network constructors ####
 def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
@@ -77,6 +79,20 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
         
         elif ('separatefeco' in cfg.train['network_type']):
             print('--------------- Using separate sensory feco and intention networks ---------------')
+            act_keys = ['activation', 'activation_hook', 'activation_claw']
+            afn = dict()
+            for aa in act_keys:
+                if aa in cfg.train:
+                    if cfg.train[aa] == 'gaussian':
+                        print('Using gaussian activation for ', aa)
+                        afn[aa] = networks.gaussian_activation
+                    elif cfg.train[aa] == 'relu':
+                        afn[aa] = nn.relu
+                    elif cfg.train[aa] == 'tanh':
+                        afn[aa] = nn.tanh
+                else:
+                    afn[aa] = nn.relu
+            
             network_type = custom_ppo_networks.make_separate_sensory_and_intention_networks
             network_factory=functools.partial(
                 network_type,
@@ -91,6 +107,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                 vel_means = feco_data['vmeans'],
                 vel_std = feco_data['vstd'],
                 std_scale = cfg.train['std_scale'],
+                **afn,
                 )
             checkpoint_network_factory=functools.partial(
                     network_type,
@@ -105,6 +122,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                     vel_means = feco_data['vmeans'],
                     vel_std = feco_data['vstd'],
                     std_scale = cfg.train['std_scale'],
+                    **afn,
                     )
             
     

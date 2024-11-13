@@ -16,6 +16,17 @@ from jax import random
 import flax
 from flax import linen as nn
 
+class TuningActivation(nn.Module):
+    mu: float = 0.0
+    sigma: float = 1.0
+    @nn.compact
+    def __call__(self, x):
+        return jnp.exp(-((x - self.mu) ** 2) / ( self.sigma ** 2))
+    
+def gaussian_activation(x, mu=0.0, sigma=1.0):
+    return jnp.exp(-((x - mu) ** 2) / ( sigma ** 2))
+
+    
 class FecoBiasInitializer(jax.nn.initializers.Initializer):
     def __init__(self, thresholds, nneu=2, scale=1.1, random_bias=False ):
         self.thresholds = thresholds
@@ -660,6 +671,52 @@ class SensoryEncodingNetwork(nn.Module):
         return sensez
 
 
+class SensoryEncodingNetwork_v2(nn.Module):
+    """ turn sensory observations into latents based on the Feco model
+    """
+    task_obs_size: int
+    joints: int
+    angle_means: jnp.ndarray 
+    angle_std: jnp.ndarray 
+    vel_means: jnp.ndarray 
+    vel_std: jnp.ndarray 
+    nneurons: int = 2
+    activation: networks.ActivationFn = nn.relu  # deprecated
+    activation_hook: networks.ActivationFn = nn.tanh
+    activation_claw: networks.ActivationFn = nn.relu
+    body_pos: int = 7
+    body_vel: int = 6
+    std_scale: float = 1.1
+    #npos: int = -1      # specify how many qpos are there, default is 7 + joints
+    #nvel: int = -1      # specify how many qvel are there, default is 6 + joints
+    joint_idx: Sequence[int] = dataclasses.field(default_factory=lambda: [0]) # not used yet -> since it can be non-contiguous?
+    
+
+    def setup(self):
+        self.sensory_hook = CustomFeco(nangles=self.joints, angle_means=self.vel_means, angle_std=self.vel_std, 
+                                          nneurons=self.nneurons, activation=self.activation_hook, scale=self.std_scale, )
+        self.sensory_claw = CustomFeco(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
+                                          nneurons=self.nneurons, activation=self.activation_claw, scale=self.std_scale, )
+        #if self.npos < 0:
+        self.npos = self.joints + self.body_pos
+        #if self.nvel < 0:
+        self.nvel = self.joints + self.body_vel
+
+    def __call__(self, obs, key):
+        #_, encoder_rng = jax.random.split(key)
+        # encode sensory state
+        qpos = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size, self.npos, axis=-1 ) # should at least be 7 + njoints
+        qvel = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size + self.npos, self.nvel, axis=-1 ) # should at least be 6 + njoints
+        z1 = self.sensory_claw(jax.lax.dynamic_slice_in_dim(qpos, -self.joints, self.joints, axis=-1))
+        z2 = self.sensory_hook(jax.lax.dynamic_slice_in_dim(qvel, -self.joints, self.joints, axis=-1))
+        sensez = jnp.concatenate([
+            jax.lax.dynamic_slice_in_dim(qpos, 0, self.body_pos, axis=-1),
+            jax.lax.dynamic_slice_in_dim(qvel, 0,  self.body_vel, axis=-1),
+            z1, z2], axis=-1)
+
+        return sensez
+    
+
 ###### NOT USED YET
 '''
 class SensoryEncodingNetwork_v2(nn.Module):
@@ -752,13 +809,14 @@ def make_sensory_encoding_network(
     vel_std: jnp.ndarray = jnp.ones(36),
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     std_scale = 1.1,
+    **kwargs,
 ) -> networks.FeedForwardNetwork:
     """
     Minimal function to create a sensory encoding network that takes in observations and returns sensory latents.
     Based on Feco Hook and Claw neurons. Defaults:Activation is ReLU, Free joint has 7 qpos, 6 qvel.
     """
 
-    sensory_module = SensoryEncodingNetwork(
+    sensory_module = SensoryEncodingNetwork_v2(  # changed to v2
         task_obs_size=task_obs_size,
         joints=joints,
         joint_idx=joint_idx,
@@ -768,7 +826,9 @@ def make_sensory_encoding_network(
         vel_std=vel_std,
         nneurons=nneurons,
         std_scale=std_scale,
+        **kwargs
     )
+    print('sensory_module', sensory_module)
 
     def encode_senses(processor_params, sensory_params, obs, key):
         obs = preprocess_observations_fn(obs, processor_params)
@@ -799,6 +859,7 @@ def make_intention_and_sensory_networks(
     vel_means: jnp.ndarray = jnp.zeros(36),
     vel_std: jnp.ndarray = jnp.ones(36),
     std_scale = 1.1,
+    **kwargs,
     ) -> Tuple[IntentionNetwork, networks.FeedForwardNetwork]:
     """Creates an intention policy network and a sensory encoding network."""
     sense_latent_size = 7 + 6 + 2 * joints * nneurons
@@ -809,5 +870,6 @@ def make_intention_and_sensory_networks(
     sensory_net = make_sensory_encoding_network(total_obs_size=total_obs_size, task_obs_size=task_obs_size, 
                                                 joints=joints, joint_idx=joint_idx, nneurons=nneurons, std_scale=std_scale,
                                                angle_means=angle_means, angle_std=angle_std, vel_means=vel_means, vel_std=vel_std, 
-                                               preprocess_observations_fn=preprocess_observations_fn)
+                                               preprocess_observations_fn=preprocess_observations_fn,
+                                               **kwargs)
     return (intention_net, sensory_net)

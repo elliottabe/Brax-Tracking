@@ -132,9 +132,9 @@ def main(cfg: DictConfig) -> None:
             if any(model_path.iterdir()):
                 from natsort import natsorted
                 ##### Get all the checkpoint files #####
-                ckpt_files = natsorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()])
+                ckpt_files = natsorted([Path(f.path) for f in os.scandir(model_path) if f.is_dir()]) # ckpt_files = natsorted([f.path for f in os.scandir(model_path) if f.is_dir()]) # not Path(f.path)
                 ##### Get the latest checkpoint #####
-                max_ckpt = ckpt_files[-1]
+                max_ckpt = ckpt_files[-1] # max_ckpt = Path(ckpt_files[-1])
                 EVAL_STEPS = int(max_ckpt.stem)
                 if EVAL_STEPS > 0 :
                     restore_checkpoint = max_ckpt
