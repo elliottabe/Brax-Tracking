@@ -39,7 +39,7 @@ class FecoBiasInitializer(jax.nn.initializers.Initializer):
         signs = jnp.tile(jnp.array([[-1,1]]).astype(dtype), (na, self.nneu))[:, :self.nneu]
         biases = jnp.tile( 1/ self.scale * self.thresholds.reshape(-1, 1).astype(dtype), self.nneu) * signs  # alternating signs
         if self.random_bias:
-            biases = biases + 2 * jax.random.uniform(key, biases.shape).astype(dtype)
+            biases = biases * jax.random.uniform(key, biases.shape, minval=-1, maxval=2).astype(dtype) # = -100% to +100%
         return jnp.broadcast_to(biases.flatten(), shape)
 
 class FecoWeightInitializer(jax.nn.initializers.Initializer):
@@ -622,7 +622,7 @@ class IntentionNetwork_wSL(nn.Module):
             jnp.concatenate([z, sense_z], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar}
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, 'sense_z':sense_z}
     
 
 ### Sensory Networks Only
@@ -690,13 +690,14 @@ class SensoryEncodingNetwork_v2(nn.Module):
     #npos: int = -1      # specify how many qpos are there, default is 7 + joints
     #nvel: int = -1      # specify how many qvel are there, default is 6 + joints
     joint_idx: Sequence[int] = dataclasses.field(default_factory=lambda: [0]) # not used yet -> since it can be non-contiguous?
-    
+    random_bias: bool = False
 
     def setup(self):
         self.sensory_hook = CustomFeco(nangles=self.joints, angle_means=self.vel_means, angle_std=self.vel_std, 
                                           nneurons=self.nneurons, activation=self.activation_hook, scale=self.std_scale, )
         self.sensory_claw = CustomFeco(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
-                                          nneurons=self.nneurons, activation=self.activation_claw, scale=self.std_scale, )
+                                          nneurons=self.nneurons, activation=self.activation_claw, scale=self.std_scale, 
+                                          random_bias=self.random_bias)
         #if self.npos < 0:
         self.npos = self.joints + self.body_pos
         #if self.nvel < 0:
@@ -828,7 +829,7 @@ def make_sensory_encoding_network(
         std_scale=std_scale,
         **kwargs
     )
-    print('sensory_module', sensory_module)
+    #print('sensory_module', sensory_module)
 
     def encode_senses(processor_params, sensory_params, obs, key):
         obs = preprocess_observations_fn(obs, processor_params)

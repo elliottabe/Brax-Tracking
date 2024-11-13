@@ -324,7 +324,8 @@ def train(
     # Load from checkpoint, and set params for decoder if freeze, or all if continuing
     if checkpoint_path is not None and epath.Path(checkpoint_path).exists():
         logging.info("restoring from checkpoint %s", checkpoint_path)
-        # env_steps = int(epath.Path(checkpoint_path).stem)
+        env_steps = int(epath.Path(checkpoint_path).stem)
+        print('reset env_steps to:', env_steps)
         ckptr = ocp.CompositeCheckpointHandler()
         tracking_task_obs_size = 935
         tracking_obs_size = (
@@ -360,6 +361,7 @@ def train(
         loaded_normalizer_params = loaded_ckpt["normalizer_params"]
         loaded_params = loaded_ckpt["params"]
         env_steps = loaded_ckpt["env_steps"]
+        print('loaded env_steps:', env_steps)
 
         # Only partially replace initial policy if freezing decoder
         ##### TO DO: freeze sensory params ----> doesn't handle sensory params within decoder properly yet
@@ -411,6 +413,7 @@ def train(
             init_params = init_params.replace(value=loaded_params.value)
             normalizer_params=loaded_normalizer_params
         else:
+            print('starting from env_steps = 0')
             env_steps = 0
 
         training_state = (
@@ -653,6 +656,7 @@ def train(
                 training_state, env_state, epoch_keys
             )
             current_step = int(_unpmap(training_state.env_steps))
+            print('current step = ...... ', current_step)
 
             key_envs = jax.vmap(
                 lambda x, s: jax.random.split(x[0], s), in_axes=(0, None)
@@ -680,6 +684,7 @@ def train(
                 )
             )
             # Save checkpoint
+            print('saving checkpoint = ', results[2])
             checkpoint_manager.save(
                 it,
                 results,

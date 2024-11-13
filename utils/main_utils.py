@@ -107,6 +107,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                 vel_means = feco_data['vmeans'],
                 vel_std = feco_data['vstd'],
                 std_scale = cfg.train['std_scale'],
+                random_bias = cfg.train['random_feco_bias'],
                 **afn,
                 )
             checkpoint_network_factory=functools.partial(
@@ -122,6 +123,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                     vel_means = feco_data['vmeans'],
                     vel_std = feco_data['vstd'],
                     std_scale = cfg.train['std_scale'],
+                    random_bias = cfg.train['random_feco_bias'],
                     **afn,
                     )
             

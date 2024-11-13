@@ -101,10 +101,10 @@ def make_sensory_inference_fn(ppo_networks: PPOSensingImitationNetworks):
             key_sample, key_policy, key_sensory = jax.random.split(key_sample, 3)
             preparams, polparams, senseparams = params
             sensory_latents = sensory_network.apply(preparams, senseparams, observations, key_sensory)
-            logits, _ = policy_network.apply(preparams, polparams, observations, sensory_latents, key_policy)
+            logits, latents = policy_network.apply(preparams, polparams, observations, sensory_latents, key_policy)
 
             if deterministic:
-                return ppo_networks.parametric_action_distribution.mode(logits), {}
+                return ppo_networks.parametric_action_distribution.mode(logits), latents
 
             # Sample action based on logits (mean and logvar)
             raw_actions = parametric_action_distribution.sample_no_postprocessing(
@@ -120,6 +120,7 @@ def make_sensory_inference_fn(ppo_networks: PPOSensingImitationNetworks):
                 "log_prob": log_prob,
                 "raw_action": raw_actions,
                 "logits": logits,
+                'latents': latents,
             }
 
         return policy
