@@ -227,7 +227,15 @@ class FlyTracking(PipelineEnv):
         )
         # Randomly sample velocities 
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
+        mj_model = self.sys.mj_model
+        mj_data = mujoco.MjData(mj_model)
         # Physics step
+        penetrating = True
+        while penetrating: 
+            mj_data.qpos[2] += 0.0001
+            mujoco.mj_forward(mj_model, mj_data)
+            penetrating = mj_data.ncon > 0
+        qpos = qpos.at[2].set(jp.array(mj_data.qpos[2]))
         data = self.pipeline_init(qpos, qvel)
         # Grab observations
         reference_obs, proprioceptive_obs = self._get_obs(data, info)
