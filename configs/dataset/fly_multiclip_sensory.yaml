@@ -36,6 +36,8 @@ env_args:
   ref_len: 5
   free_jnt: True
   inference_mode: False
+  opto_mode: False
+  sensory_neurons: 1440
   end_eff_names:
     - claw_T1_left
     - claw_T1_right

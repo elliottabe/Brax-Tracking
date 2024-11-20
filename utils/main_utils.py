@@ -92,6 +92,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                         afn[aa] = nn.tanh
                 else:
                     afn[aa] = nn.relu
+            iclaw = cfg.train['invert_claw'] if 'invert_claw' in cfg.train else False
             
             network_type = custom_ppo_networks.make_separate_sensory_and_intention_networks
             network_factory=functools.partial(
@@ -108,6 +109,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                 vel_std = feco_data['vstd'],
                 std_scale = cfg.train['std_scale'],
                 random_bias = cfg.train['random_feco_bias'],
+                invert_claw=iclaw,
                 **afn,
                 )
             checkpoint_network_factory=functools.partial(
@@ -124,6 +126,7 @@ def setup_network_factory( cfg, rollout_dir='rollout_data/' ):
                     vel_std = feco_data['vstd'],
                     std_scale = cfg.train['std_scale'],
                     random_bias = cfg.train['random_feco_bias'],
+                    invert_claw=iclaw,
                     **afn,
                     )
             

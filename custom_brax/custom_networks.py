@@ -83,6 +83,32 @@ class CustomFeco(nn.Module):
             x = self.activation(x)
         return x
 
+class CustomFeco_inv(nn.Module):
+    '''
+    Custom Dense layer with Feco initialization and activation
+    '''
+    nangles: int
+    angle_means: jnp.ndarray
+    angle_std: jnp.ndarray
+    nneurons: int = 2               # how many neurons per angle
+    activation: networks.ActivationFn = nn.relu
+    activate_layer: bool = True
+    random_bias: bool = False
+    scale: float = 1.1
+
+    @nn.compact
+    def __call__(self, x, eps=1e-3):
+        output_features = self.nneurons * self.nangles
+        assert self.angle_means.shape == (self.nangles,)
+        assert self.angle_std.shape == (self.nangles,)
+        std = self.angle_std + eps * jax.random.uniform(jax.random.PRNGKey(0), shape=self.angle_std.shape) # if there are zeros in angle_std
+        weight_init = FecoWeightInitializer(std, nneu=self.nneurons, scale=self.scale )
+        bias_init = FecoBiasInitializer(self.angle_means / std, nneu=self.nneurons, random_bias=self.random_bias, scale=self.scale )
+        x = nn.Dense(features=output_features, kernel_init=weight_init, bias_init= bias_init, name="feco")(x)
+        if self.activate_layer:
+            x = 1 - self.activation(x)
+        return x
+
 class VariationalLayer(nn.Module):
     latent_size: int
 
@@ -718,6 +744,65 @@ class SensoryEncodingNetwork_v2(nn.Module):
         return sensez
     
 
+
+class SensoryEncodingNetwork_v3(nn.Module):
+    """ turn sensory observations into latents based on the Feco model
+    """
+    task_obs_size: int
+    joints: int
+    angle_means: jnp.ndarray 
+    angle_std: jnp.ndarray 
+    vel_means: jnp.ndarray 
+    vel_std: jnp.ndarray 
+    nneurons: int = 2
+    activation: networks.ActivationFn = nn.relu  # deprecated
+    activation_hook: networks.ActivationFn = nn.tanh
+    activation_claw: networks.ActivationFn = nn.relu
+    body_pos: int = 7
+    body_vel: int = 6
+    std_scale: float = 1.1
+    #npos: int = -1      # specify how many qpos are there, default is 7 + joints
+    #nvel: int = -1      # specify how many qvel are there, default is 6 + joints
+    joint_idx: Sequence[int] = dataclasses.field(default_factory=lambda: [0]) # not used yet -> since it can be non-contiguous?
+    random_bias: bool = False
+    invert_claw: bool = False  # not yet used
+
+    def setup(self):
+        self.sensory_hook = CustomFeco(nangles=self.joints, angle_means=self.vel_means, angle_std=self.vel_std, 
+                                          nneurons=self.nneurons, activation=self.activation_hook, scale=self.std_scale, )
+        n1 = self.nneurons//2
+        n2 = self.nneurons - n1
+        self.sensory_claw_1 = CustomFeco(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
+                                          nneurons=n1, activation=self.activation_claw, scale=self.std_scale, 
+                                          random_bias=self.random_bias)
+        self.sensory_claw_2 = CustomFeco_inv(nangles=self.joints, angle_means=self.angle_means, angle_std=self.angle_std, 
+                                          nneurons=n2, activation=self.activation_claw, scale=self.std_scale, 
+                                          random_bias=self.random_bias)
+        print(f'Making two claw layers of size {n1}, {n2} ------------------- ')
+        #if self.npos < 0:
+        self.npos = self.joints + self.body_pos
+        #if self.nvel < 0:
+        self.nvel = self.joints + self.body_vel
+        self.n_sensory_latents = self.joints * 2 * self.nneurons
+
+    def __call__(self, obs, key):
+        #_, encoder_rng = jax.random.split(key)
+        # encode sensory state
+        qpos = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size, self.npos, axis=-1 ) # should at least be 7 + njoints
+        qvel = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size + self.npos, self.nvel, axis=-1 ) # should at least be 6 + njoints
+        #opto_inp = jax.lax.dynamic_slice_in_dim( obs, -self.n_sensory_latents, self.n_sensory_latents, axis=-1 ) # 1440!!!! -- too long
+        z1_1 = self.sensory_claw_1(jax.lax.dynamic_slice_in_dim(qpos, -self.joints, self.joints, axis=-1))
+        z1_2 = self.sensory_claw_2(jax.lax.dynamic_slice_in_dim(qpos, -self.joints, self.joints, axis=-1))
+        z2 = self.sensory_hook(jax.lax.dynamic_slice_in_dim(qvel, -self.joints, self.joints, axis=-1))
+        #opto_inp = jnp.nan_to_num(opto_inp, nan=0.0)
+        encoded_neu = jnp.concatenate([z1_1, z1_2, z2], axis=-1) #+ opto_inp
+        sensez = jnp.concatenate([
+            jax.lax.dynamic_slice_in_dim(qpos, 0, self.body_pos, axis=-1),
+            jax.lax.dynamic_slice_in_dim(qvel, 0,  self.body_vel, axis=-1),
+            encoded_neu], axis=-1)
+
+        return sensez
+    
 ###### NOT USED YET
 '''
 class SensoryEncodingNetwork_v2(nn.Module):
@@ -810,26 +895,39 @@ def make_sensory_encoding_network(
     vel_std: jnp.ndarray = jnp.ones(36),
     preprocess_observations_fn: types.PreprocessObservationFn = types.identity_observation_preprocessor,
     std_scale = 1.1,
+    invert_claw: bool = False,
     **kwargs,
 ) -> networks.FeedForwardNetwork:
     """
     Minimal function to create a sensory encoding network that takes in observations and returns sensory latents.
     Based on Feco Hook and Claw neurons. Defaults:Activation is ReLU, Free joint has 7 qpos, 6 qvel.
     """
-
-    sensory_module = SensoryEncodingNetwork_v2(  # changed to v2
-        task_obs_size=task_obs_size,
-        joints=joints,
-        joint_idx=joint_idx,
-        angle_means=angle_means,
-        angle_std=angle_std,
-        vel_means=vel_means,
-        vel_std=vel_std,
-        nneurons=nneurons,
-        std_scale=std_scale,
-        **kwargs
-    )
-    #print('sensory_module', sensory_module)
+    if invert_claw:
+        sensory_module = SensoryEncodingNetwork_v3(  # changed to v2
+            task_obs_size=task_obs_size,
+            joints=joints,
+            joint_idx=joint_idx,
+            angle_means=angle_means,
+            angle_std=angle_std,
+            vel_means=vel_means,
+            vel_std=vel_std,
+            nneurons=nneurons,
+            std_scale=std_scale,
+            **kwargs
+        )
+    else:
+        sensory_module = SensoryEncodingNetwork_v2(  # changed to v2
+            task_obs_size=task_obs_size,
+            joints=joints,
+            joint_idx=joint_idx,
+            angle_means=angle_means,
+            angle_std=angle_std,
+            vel_means=vel_means,
+            vel_std=vel_std,
+            nneurons=nneurons,
+            std_scale=std_scale,
+            **kwargs
+        )
 
     def encode_senses(processor_params, sensory_params, obs, key):
         obs = preprocess_observations_fn(obs, processor_params)

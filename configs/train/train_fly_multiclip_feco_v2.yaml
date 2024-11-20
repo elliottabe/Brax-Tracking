@@ -7,8 +7,8 @@ algo_name: ppo
 task_name: ${dataset.dname}
 note: "separate intention and sensory networks"
 num_envs: 2048
-num_timesteps: 10_000
-eval_every: 1_000
+num_timesteps: 10_000_000_000
+eval_every: 10_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001
@@ -38,6 +38,7 @@ std_scale: .75
 activation: "relu"
 activation_hook: "tanh"
 activation_claw: "gaussian"
+invert_claw: True
 ckpt_net:
   encoder_hidden_layer_sizes: [256, 256]
   decoder_hidden_layer_sizes: [256, 256]

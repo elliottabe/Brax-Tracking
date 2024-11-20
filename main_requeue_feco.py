@@ -4,7 +4,7 @@ import subprocess as sp
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
 os.environ['MUJOCO_GL'] = 'egl'
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use GPU 1
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1
 import functools
 import jax, jax.numpy as jnp
 # jax.config.update("jax_enable_x64", True)
@@ -85,7 +85,7 @@ def main(cfg: DictConfig) -> None:
     ##### Scale number of envs based on total memory per gpu #####
     tot_mem = get_gpu_memory()[0]
     num_envs = int(closest_power_of_two(tot_mem/21.4))
-    cfg.train.num_envs = cfg.num_gpus*num_envs
+    #cfg.train.num_envs = cfg.num_gpus*num_envs
     if n_gpus != cfg.num_gpus:
         cfg.num_gpus = n_gpus
         cfg.train.num_envs = n_gpus*num_envs
@@ -156,6 +156,10 @@ def main(cfg: DictConfig) -> None:
 
     #### setup network constructors
     network_factory, checkpoint_network_factory = setup_network_factory(cfg)
+    try:
+        env_args['sensory_neurons'] = cfg.train['sensory_neurons'] * 2 * len( env_args['joint_names'])
+    except:
+        env_args['sensory_neurons'] = 1
 
     while not interrupted and not converged:
         # Init env
