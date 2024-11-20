@@ -103,7 +103,7 @@ class EncoderDecoderNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {}
+        return action, {'z':z}
 
 
 class RandomIntentionNetwork(nn.Module):
