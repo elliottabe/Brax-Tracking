@@ -1,7 +1,7 @@
 import os
 import subprocess as sp
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.975"
 os.environ['MUJOCO_GL'] = 'egl'
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1
@@ -83,7 +83,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 def main(cfg: DictConfig) -> None:
     ##### Scale number of envs based on total memory per gpu #####
     tot_mem = get_gpu_memory()[0]
-    num_envs = int(closest_power_of_two(tot_mem/21.4))
+    num_envs = int(closest_power_of_two(tot_mem/21.4)) #21.4
     cfg.train.num_envs = cfg.num_gpus*num_envs
     if n_gpus != cfg.num_gpus:
         cfg.num_gpus = n_gpus

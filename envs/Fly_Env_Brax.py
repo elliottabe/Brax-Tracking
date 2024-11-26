@@ -228,7 +228,7 @@ class FlyTracking(PipelineEnv):
         # Randomly sample velocities 
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
         # floor_z = self.sys.mj_model.geom('floor').pos[2]
-        # # Physics step
+        # # Physics step check if feet penetrate floor
         # def body_fn(vals):
         #     qpos,qvel,floor_z = vals
         #     qpos = qpos.at[2].set(qpos[2]+0.0001)
