@@ -115,7 +115,7 @@ def main(cfg: DictConfig) -> None:
         # Use pickle.load() to load the data from the file
         reference_clip = pickle.load(file)
     
-    nclips=112
+    nclips=200
     inds = jax.random.randint(jax.random.PRNGKey(0), (nclips,), 0, len(reference_clip.position))
     reference_clip =reference_clip.replace(
         position=reference_clip.position[inds],
