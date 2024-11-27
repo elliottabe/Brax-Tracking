@@ -83,7 +83,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 def main(cfg: DictConfig) -> None:
     ##### Scale number of envs based on total memory per gpu #####
     tot_mem = get_gpu_memory()[0]
-    num_envs = int(closest_power_of_two(tot_mem/21.4)) #21.4
+    num_envs = min([cfg.train.num_envs,int(closest_power_of_two(tot_mem/21.4))]) #21.4
     cfg.train.num_envs = cfg.num_gpus*num_envs
     if n_gpus != cfg.num_gpus:
         cfg.num_gpus = n_gpus
@@ -114,7 +114,19 @@ def main(cfg: DictConfig) -> None:
     with open(reference_path, "rb") as file:
         # Use pickle.load() to load the data from the file
         reference_clip = pickle.load(file)
-        
+    
+    nclips=750
+    inds = jax.random.randint(jax.random.PRNGKey(0), (nclips,), 0, len(reference_clip.position))
+    reference_clip =reference_clip.replace(
+        position=reference_clip.position[inds],
+        quaternion=reference_clip.quaternion[inds],
+        joints=reference_clip.joints[inds],
+        body_positions=reference_clip.body_positions[inds],
+        velocity=reference_clip.velocity[inds],
+        joints_velocity=reference_clip.joints_velocity[inds],
+        angular_velocity=reference_clip.angular_velocity[inds],
+        body_quaternions=reference_clip.body_quaternions[inds],
+    )
     global EVAL_STEPS
     EVAL_STEPS = 0
     ########## Handling requeuing ##########
