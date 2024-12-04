@@ -1,7 +1,7 @@
 import os
 import subprocess as sp
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.975"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"
 os.environ['MUJOCO_GL'] = 'egl'
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1
@@ -28,8 +28,8 @@ from custom_brax import network_masks as masks
 from orbax import checkpoint as ocp
 from flax.training import orbax_utils
 # from envs.rodent import RodentSingleClip
-from preprocessing.preprocess import process_clip_to_train
-from envs.Fly_Env_Brax import FlyTracking, FlyMultiClipTracking, FlyRunSim
+from preprocessing.mjx_preprocess import process_clip_to_train
+from envs.Fly_Env_Brax2 import FlyTracking, FlyMultiClipTracking, FlyRunSim
 from utils.utils import *
 from utils.fly_logging import log_eval_rollout
 
@@ -115,18 +115,16 @@ def main(cfg: DictConfig) -> None:
         # Use pickle.load() to load the data from the file
         reference_clip = pickle.load(file)
     
-    nclips=200
-    inds = jax.random.randint(jax.random.PRNGKey(0), (nclips,), 0, len(reference_clip.position))
-    reference_clip =reference_clip.replace(
-        position=reference_clip.position[inds],
-        quaternion=reference_clip.quaternion[inds],
-        joints=reference_clip.joints[inds],
-        body_positions=reference_clip.body_positions[inds],
-        velocity=reference_clip.velocity[inds],
-        joints_velocity=reference_clip.joints_velocity[inds],
-        angular_velocity=reference_clip.angular_velocity[inds],
-        body_quaternions=reference_clip.body_quaternions[inds],
-    )
+    all_ref_clip = {}
+    all_ref_clip['position'] = reference_clip.position
+    all_ref_clip['quaternion'] = reference_clip.quaternion
+    all_ref_clip['joints'] = reference_clip.joints
+    all_ref_clip['body_positions'] =reference_clip.body_positions
+    all_ref_clip['velocity'] = reference_clip.velocity
+    all_ref_clip['joints_velocity'] = reference_clip.joints_velocity
+    all_ref_clip['angular_velocity'] = reference_clip.angular_velocity
+    all_ref_clip['body_quaternions'] = reference_clip.body_quaternions
+    reference_clip = all_ref_clip
     global EVAL_STEPS
     EVAL_STEPS = 0
     ########## Handling requeuing ##########
