@@ -17,7 +17,7 @@ import numpy as np
 
 import os
 from pathlib import Path
-from preprocessing.preprocess import ReferenceClip
+from preprocessing.mjx_preprocess import ReferenceClip
 
 
 def _bounded_quat_dist(source: np.ndarray, target: np.ndarray) -> np.ndarray:

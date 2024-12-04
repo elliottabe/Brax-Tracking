@@ -3,10 +3,10 @@ dname: fly_multiclip
 camera: 1
 rendering_mjcf: ${paths.cwd_dir}/assets/fruitfly/fruitfly_force_pair.xml
 stac_path: ${paths.data_dir}/transform_tethered.p
-clip_idx: all_clips_turn_interp.p
+clip_idx: all_clips_turn_interp_small.p
 ref_traj_length: 5
 env_args:
-  clip_length: 1001
+  clip_length: 600
   mjcf_path: "${paths.cwd_dir}/assets/fruitfly/fruitfly_force_fast.xml" 
   physics_timestep: 2e-4
   solver: cg
