@@ -1,7 +1,7 @@
 import os
 import subprocess as sp
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.85"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.875"
 os.environ['MUJOCO_GL'] = 'egl'
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1
