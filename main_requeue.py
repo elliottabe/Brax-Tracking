@@ -81,7 +81,15 @@ def closest_power_of_two(x):
 signal.signal(signal.SIGTERM, signal_handler)
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    assert n_gpus == cfg.num_gpus, 'Number of GPUs missmatched'
+    ##### Scale number of envs based on total memory per gpu #####
+    tot_mem = get_gpu_memory()[0]
+    num_envs = min([cfg.train.num_envs,int(closest_power_of_two(tot_mem/21.4))]) #21.4
+    cfg.train.num_envs = cfg.num_gpus*num_envs
+    if n_gpus != cfg.num_gpus:
+        cfg.num_gpus = n_gpus
+        cfg.train.num_envs = n_gpus*num_envs
+    print(f'GPUs:{n_gpus}, tot_mem:{tot_mem}Mb, num_envs:{num_envs}, total_envs:{cfg.train.num_envs}')
+    
     print('run_id:', cfg.run_id)
     if ('load_jobid' in cfg) and (cfg['load_jobid'] is not None) and (cfg['load_jobid'] !=''):
         run_id = cfg.load_jobid
