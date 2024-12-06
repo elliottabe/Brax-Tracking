@@ -1,7 +1,7 @@
 import os
 import subprocess as sp
 
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.95"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.875"
 os.environ['MUJOCO_GL'] = 'egl'
 os.environ['PYOPENGL_PLATFORM'] = 'egl'
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1"  # Use GPU 1
@@ -28,9 +28,8 @@ from custom_brax import network_masks as masks
 from orbax import checkpoint as ocp
 from flax.training import orbax_utils
 # from envs.rodent import RodentSingleClip
-from preprocessing.preprocess import process_clip_to_train
-from envs.Fly_Env_Brax import FlyTracking, FlyMultiClipTracking, FlyRunSim
-# from envs.fruitfly import Fruitfly_Tethered, Fruitfly_Run, FlyRunSim, FlyStand, Fruitfly_Freejnt
+from preprocessing.mjx_preprocess import process_clip_to_train
+from envs.Fly_Env_Brax2 import FlyTracking, FlyMultiClipTracking, FlyRunSim
 from utils.utils import *
 from utils.fly_logging import log_eval_rollout
 
@@ -82,15 +81,7 @@ def closest_power_of_two(x):
 signal.signal(signal.SIGTERM, signal_handler)
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    ##### Scale number of envs based on total memory per gpu #####
-    tot_mem = get_gpu_memory()[0]
-    num_envs = int(closest_power_of_two(tot_mem/21.4))
-    cfg.train.num_envs = cfg.num_gpus*num_envs
-    if n_gpus != cfg.num_gpus:
-        cfg.num_gpus = n_gpus
-        cfg.train.num_envs = n_gpus*num_envs
-    print(f'GPUs:{n_gpus}, tot_mem:{tot_mem}Mb, num_envs:{num_envs}, total_envs:{cfg.train.num_envs}')
-    
+    assert n_gpus == cfg.num_gpus, 'Number of GPUs missmatched'
     print('run_id:', cfg.run_id)
     if ('load_jobid' in cfg) and (cfg['load_jobid'] is not None) and (cfg['load_jobid'] !=''):
         run_id = cfg.load_jobid
@@ -115,7 +106,17 @@ def main(cfg: DictConfig) -> None:
     with open(reference_path, "rb") as file:
         # Use pickle.load() to load the data from the file
         reference_clip = pickle.load(file)
-        
+    
+    all_ref_clip = {}
+    all_ref_clip['position'] = reference_clip.position
+    all_ref_clip['quaternion'] = reference_clip.quaternion
+    all_ref_clip['joints'] = reference_clip.joints
+    all_ref_clip['body_positions'] =reference_clip.body_positions
+    all_ref_clip['velocity'] = reference_clip.velocity
+    all_ref_clip['joints_velocity'] = reference_clip.joints_velocity
+    all_ref_clip['angular_velocity'] = reference_clip.angular_velocity
+    all_ref_clip['body_quaternions'] = reference_clip.body_quaternions
+    reference_clip = all_ref_clip
     global EVAL_STEPS
     EVAL_STEPS = 0
     ########## Handling requeuing ##########

@@ -76,7 +76,7 @@ def log_eval_rollout(cfg, rollout, state, env, reference_clip, model_path, num_s
     ref_traj = env._get_reference_clip(rollout[0].info)
     print(f"clip_id:{rollout[0].info}")
     qposes_ref = np.repeat(
-        np.hstack([ref_traj.position, ref_traj.quaternion, ref_traj.joints]),
+        np.hstack([ref_traj['position'], ref_traj['quaternion'], ref_traj['joints']]),
         env._steps_for_cur_frame,
         axis=0,
     )

@@ -297,6 +297,7 @@ def train(
 
     # Load from checkpoint, and set params for decoder if freeze, or all if continuing
     if checkpoint_path is not None and epath.Path(checkpoint_path).exists():
+        Eval_it = int(checkpoint_path.stem)
         logging.info("restoring from checkpoint %s", checkpoint_path)
         # env_steps = int(epath.Path(checkpoint_path).stem)
         ckptr = ocp.CompositeCheckpointHandler()
@@ -362,6 +363,7 @@ def train(
             init_params = init_params.replace(value=loaded_params.value)
             normalizer_params=loaded_normalizer_params
         else:
+            Eval_it=0
             env_steps = 0
 
         training_state = (
@@ -376,6 +378,7 @@ def train(
         )
     else:
         running_statistics_mask = None
+        Eval_it=0
 
     if num_timesteps == 0:
         return (
@@ -580,7 +583,7 @@ def train(
     training_metrics = {}
     training_walltime = 0
     current_step = 0
-    for it in range(num_evals_after_init):
+    for it in range(Eval_it,num_evals_after_init):
         logging.info("starting iteration %s %s", it, time.time() - xt)
 
         for _ in range(max(num_resets_per_eval, 1)):
@@ -630,7 +633,7 @@ def train(
             policy_params_fn(current_step, make_policy, params, policy_params_fn_key)
 
     total_steps = current_step
-    assert total_steps >= num_timesteps
+    # assert total_steps >= num_timesteps
 
     # If there was no mistakes the training_state should still be identical on all
     # devices.

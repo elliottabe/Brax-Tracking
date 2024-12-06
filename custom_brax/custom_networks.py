@@ -80,7 +80,7 @@ class IntentionNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar}
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, 'z': z}
 
 
 class EncoderDecoderNetwork(nn.Module):
@@ -103,7 +103,7 @@ class EncoderDecoderNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {}
+        return action, {'z':z}
 
 
 class RandomIntentionNetwork(nn.Module):
@@ -123,11 +123,11 @@ class RandomIntentionNetwork(nn.Module):
         z = jax.random.normal(intention_rng, obs.shape)
         action = self.decoder(
             jnp.concatenate(
-                [z[: self.latents], obs[..., self.task_obs_size :]], axis=-1
+                [z[..., : self.latents], obs[..., self.task_obs_size :]], axis=-1
             )
         )
 
-        return action, z
+        return action, {'z':z}
 
 
 def make_intention_policy(

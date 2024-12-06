@@ -14,8 +14,8 @@ load_jobid: ''
 # set default task and default training config based on dataset
 defaults:
   - _self_
-  - dataset: fly_freejnt
-  - train: train_fly_freejnt
+  - dataset: fly_multiclip
+  - train: train_fly_multiclip
   - paths: hyak
   # - override hydra/launcher: joblib
   # - hydra/job_logging: disabled
@@ -39,6 +39,7 @@ hydra:
             - num_gpus
             - train.num_envs
             - load_jobid
+            - train.kl_weight
 
   run:
     dir: ${paths.base_dir}/${hydra:job.override_dirname}

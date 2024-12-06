@@ -47,7 +47,7 @@ def submit(num_gpus, partition, job_name, mem, cpus, time, note, train, dataset,
 #SBATCH -o ./OutFiles/slurm-%A_%a.out
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=eabe@uw.edu
-#SBATCH --exclude=g[3001-3007,3010-3017,3020-3027,3030-3037],z[3001,3002,3005,3006]
+#SBATCH --exclude=g[3001-3007,3010-3017,3020-3027,3030-3037],z[3001,3002,3005,3006],g3090,g3107,g3097,g3109,g3113
 module load cuda/12.4.1
 set -x
 source ~/.bashrc
