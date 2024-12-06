@@ -214,15 +214,15 @@ class FlyTracking(PipelineEnv):
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
 
         # New pos from reference clip
-        # new_qpos = jp.concatenate(
-        #     (
-        #         reference_frame['position'],
-        #         reference_frame['quaternion'],
-        #         reference_frame['joints'],
-        #     ),
-        #     axis=0,
-        # )
-        new_qpos = self.sys.qpos0
+        new_qpos = jp.concatenate(
+            (
+                reference_frame['position'],
+                reference_frame['quaternion'],
+                reference_frame['joints'],
+            ),
+            axis=0,
+        )
+        # new_qpos = self.sys.qpos0
         qpos = new_qpos + jax.random.uniform(
             rng1, (self.sys.nq,), minval=low, maxval=hi
         )

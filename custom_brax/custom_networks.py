@@ -123,11 +123,11 @@ class RandomIntentionNetwork(nn.Module):
         z = jax.random.normal(intention_rng, obs.shape)
         action = self.decoder(
             jnp.concatenate(
-                [z[: self.latents], obs[..., self.task_obs_size :]], axis=-1
+                [z[..., : self.latents], obs[..., self.task_obs_size :]], axis=-1
             )
         )
 
-        return action, z
+        return action, {'z':z}
 
 
 def make_intention_policy(
