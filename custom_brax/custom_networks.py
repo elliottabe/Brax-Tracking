@@ -173,7 +173,7 @@ class IntentionNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar}
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "z": z}
     
 
 class SensoryIntentionNetwork(nn.Module):
@@ -205,7 +205,7 @@ class SensoryIntentionNetwork(nn.Module):
             jnp.concatenate([z, sensez], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "sense_z": sensez }
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "sense_z": sensez, "z":z }
 
 
 class SensoryFecoIntentionNetwork(nn.Module):
@@ -258,7 +258,7 @@ class SensoryFecoIntentionNetwork(nn.Module):
             jnp.concatenate([z, sensez], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "sense_z": sensez }
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "sense_z": sensez, "z":z }
 
 
 
@@ -296,7 +296,7 @@ class NoisySensoryIntentionNetwork(nn.Module):
             jnp.concatenate([z, sensez], axis=-1)
         )
 
-        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "slatent_mean": slatent_mean, "slatent_logvar": slatent_logvar, "sense_z": sensez }
+        return action, {"latent_mean": latent_mean, "latent_logvar": latent_logvar, "slatent_mean": slatent_mean, "slatent_logvar": slatent_logvar, "sense_z": sensez, "z":z }
 
 
 class EncoderDecoderNetwork(nn.Module):
@@ -319,7 +319,7 @@ class EncoderDecoderNetwork(nn.Module):
             jnp.concatenate([z, obs[..., self.task_obs_size :]], axis=-1)
         )
 
-        return action, {}
+        return action, {"z":z}
     
 
 class SensoryEncoderDecoderNetwork(nn.Module):
@@ -347,7 +347,7 @@ class SensoryEncoderDecoderNetwork(nn.Module):
             jnp.concatenate([z, sensez], axis=-1)
         )
 
-        return action, {"sense_z": sensez }
+        return action, {"sense_z": sensez, "z":z }
 
 
 class RandomIntentionNetwork(nn.Module):
@@ -371,7 +371,7 @@ class RandomIntentionNetwork(nn.Module):
             )
         )
 
-        return action, z
+        return action, {"z":z}
     
 
 def make_intention_policy(

@@ -6,9 +6,9 @@ env_name: fly_freejnt_multiclip
 algo_name: ppo
 task_name: ${dataset.dname}
 note: 
-num_envs: 2048
-num_timesteps: 10_000_000_000
-eval_every: 10_000_000
+num_envs: 2048 
+num_timesteps: 50_000_000_000
+eval_every: 200_000_000
 num_resets_per_eval: 1
 reward_scaling: 1
 episode_length: 1001

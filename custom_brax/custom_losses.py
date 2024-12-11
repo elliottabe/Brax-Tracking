@@ -122,6 +122,7 @@ def compute_ppo_loss(
     clipping_epsilon: float = 0.3,
     normalize_advantage: bool = True,
     kl_loss: bool = False,
+    kl_loss: bool = False,
 ) -> Tuple[jnp.ndarray, types.Metrics]:
     """Computes PPO loss.
 

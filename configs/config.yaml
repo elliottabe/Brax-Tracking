@@ -39,6 +39,7 @@ hydra:
             - num_gpus
             - train.num_envs
             - load_jobid
+            - train.kl_weight
 
   run:
     dir: ${paths.base_dir}/${hydra:job.override_dirname}

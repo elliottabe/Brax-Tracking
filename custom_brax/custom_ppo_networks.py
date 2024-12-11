@@ -56,10 +56,10 @@ def make_inference_fn(ppo_networks: PPOImitationNetworks):
             key_sample: PRNGKey,
         ) -> Tuple[types.Action, types.Extra]:
             key_sample, key_network = jax.random.split(key_sample)
-            logits, _ = policy_network.apply(*params, observations, key_network)
+            logits, extras = policy_network.apply(*params, observations, key_network)
 
             if deterministic:
-                return ppo_networks.parametric_action_distribution.mode(logits), {}
+                return ppo_networks.parametric_action_distribution.mode(logits), extras
 
             # Sample action based on logits (mean and logvar)
             raw_actions = parametric_action_distribution.sample_no_postprocessing(

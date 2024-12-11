@@ -17,8 +17,9 @@ import numpy as np
 
 import os
 from pathlib import Path
-from preprocessing.preprocess import ReferenceClip
+from preprocessing.mjx_preprocess import ReferenceClip
 import functools
+
 
 def _bounded_quat_dist(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     """Computes a quaternion distance limiting the difference to a max of pi/2.
@@ -102,14 +103,18 @@ class FlyTracking(PipelineEnv):
 
             mjcf_path = (Path(mjcf_path).parent / "fruitfly_force_fast.xml").as_posix()
 
-        root = mjcf_dm.from_path(mjcf_path)
+        # root = mjcf_dm.from_path(mjcf_path)
+        spec = mujoco.MjSpec()
+        spec = spec.from_file(mjcf_path)
+        # first_joint.delete()
+        mj_model = spec.compile()
         print("Loaded Model:", mjcf_path)
         # for actuator in root.find_all("actuator"):
         #     actuator.gainprm = [actuator.forcerange[1]]
         #     del actuator.biastype
         #     del actuator.biasprm
 
-        mj_model = mjcf_dm.Physics.from_mjcf_model(root).model.ptr
+        # mj_model = mjcf_dm.Physics.from_mjcf_model(root).model.ptr
         mj_model.opt.solver = {
             "cg": mujoco.mjtSolver.mjSOL_CG,
             "newton": mujoco.mjtSolver.mjSOL_NEWTON,
@@ -222,20 +227,35 @@ class FlyTracking(PipelineEnv):
         low, hi = -self._reset_noise_scale, self._reset_noise_scale
 
         # New pos from reference clip
-        new_qpos = jp.concatenate(
-            (
-                reference_frame.position,
-                reference_frame.quaternion,
-                reference_frame.joints,
-            ),
-            axis=0,
-        )
+        # new_qpos = jp.concatenate(
+        #     (
+        #         reference_frame.position,
+        #         reference_frame.quaternion,
+        #         reference_frame.joints,
+        #     ),
+        #     axis=0,
+        # )
+        new_qpos = self.sys.qpos0
         qpos = new_qpos + jax.random.uniform(
             rng1, (self.sys.nq,), minval=low, maxval=hi
         )
         # Randomly sample velocities 
         qvel = jax.random.uniform(rng2, (self.sys.nv,), minval=low, maxval=hi)
-        # Physics step
+        # floor_z = self.sys.mj_model.geom('floor').pos[2]
+        # # Physics step check if feet penetrate floor
+        # def body_fn(vals):
+        #     qpos,qvel,floor_z = vals
+        #     qpos = qpos.at[2].set(qpos[2]+0.0001)
+        #     return (qpos,qvel,floor_z)
+        # def cond_fn(vals):
+        #     qpos,qvel,floor_z = vals
+        #     qpos = qpos.at[2].set(qpos[2]+0.0001)
+        #     data = self.pipeline_init(qpos, qvel)
+        #     feet_z = data.xpos[self._endeff_idxs,-1]
+        #     print(feet_z>floor_z)
+        #     return jp.all(feet_z>floor_z)
+        # jax.lax.while_loop(cond_fun=cond_fn,body_fun=body_fn, init_val=(qpos,qvel,floor_z))
+        
         data = self.pipeline_init(qpos, qvel)
         # Grab observations
         reference_obs, proprioceptive_obs = self._get_obs(data, info)
