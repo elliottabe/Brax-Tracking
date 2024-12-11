@@ -790,12 +790,12 @@ class SensoryEncodingNetwork_v3(nn.Module):
         # encode sensory state
         qpos = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size, self.npos, axis=-1 ) # should at least be 7 + njoints
         qvel = jax.lax.dynamic_slice_in_dim( obs, self.task_obs_size + self.npos, self.nvel, axis=-1 ) # should at least be 6 + njoints
-        #opto_inp = jax.lax.dynamic_slice_in_dim( obs, -self.n_sensory_latents, self.n_sensory_latents, axis=-1 ) # 1440!!!! -- too long
+        opto_inp = jax.lax.dynamic_slice_in_dim( obs, -self.n_sensory_latents, self.n_sensory_latents, axis=-1 ) # 1440!!!! -- too long
         z1_1 = self.sensory_claw_1(jax.lax.dynamic_slice_in_dim(qpos, -self.joints, self.joints, axis=-1))
         z1_2 = self.sensory_claw_2(jax.lax.dynamic_slice_in_dim(qpos, -self.joints, self.joints, axis=-1))
         z2 = self.sensory_hook(jax.lax.dynamic_slice_in_dim(qvel, -self.joints, self.joints, axis=-1))
         #opto_inp = jnp.nan_to_num(opto_inp, nan=0.0)
-        encoded_neu = jnp.concatenate([z1_1, z1_2, z2], axis=-1) #+ opto_inp
+        encoded_neu = jnp.concatenate([z1_1, z1_2, z2], axis=-1) + opto_inp
         sensez = jnp.concatenate([
             jax.lax.dynamic_slice_in_dim(qpos, 0, self.body_pos, axis=-1),
             jax.lax.dynamic_slice_in_dim(qvel, 0,  self.body_vel, axis=-1),
